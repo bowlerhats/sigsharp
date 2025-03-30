@@ -1,0 +1,27 @@
+<!-- Directory.Build.props is loaded early in build process -->
+<!-- Define stuff here that the project targets will use -->
+<Project>
+  
+  <!-- Paths -->
+  <PropertyGroup>
+    <SolutionRootPath Condition=" $(SolutionRootPath) == '' ">$(MSBuildThisFileDirectory.TrimEnd('\').Trimend('/'))</SolutionRootPath>
+    <RootPath Condition="$(RootPath) == ''">$(SolutionRootPath)/..</RootPath>
+    <DistPath Condition="$(DistPath) == ''">$(RootPath)/dist</DistPath>
+
+
+    <BuildIntermediatePath>$(DistPath)/obj</BuildIntermediatePath>
+    <BuildResultPath>$(DistPath)/bin</BuildResultPath>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <BaseOutputPath>$(BuildResultPath)</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(BuildIntermediatePath)\$(MSBuildProjectName)</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <OutputPath>$(BuildResultPath)\$(Configuration)\$(MSBuildProjectName)</OutputPath>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    
+  </ItemGroup>
+</Project>

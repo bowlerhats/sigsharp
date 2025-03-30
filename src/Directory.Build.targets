@@ -1,0 +1,4 @@
+<Project>
+  <!-- Directory.Build.targets is loaded late in build process -->
+  <!-- Define stuff here that are dependent on the project targets -->
+</Project>
