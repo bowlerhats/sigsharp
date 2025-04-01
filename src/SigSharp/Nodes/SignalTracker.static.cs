@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading;
+using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
 
@@ -8,9 +9,9 @@ public partial class SignalTracker
     public static SignalTracker Current => CurrentTracker.Value;
 
     public static bool IsReadonlyContext => Current?.IsReadonly ?? false;
-    
-    private static ISignalTrackerPool TrackerPool => DefaultSignalTrackerPool.Instance;
 
+    private static ItemPool<SignalTracker> TrackerPool { get; } = new();
+    
     private static readonly AsyncLocal<SignalTracker> CurrentTracker = new();
 
     internal static SignalTracker Push(bool expectEmpty)

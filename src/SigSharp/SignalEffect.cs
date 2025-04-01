@@ -308,15 +308,31 @@ public class SignalEffect : TrackingSignalNode
 
     private bool DoRunSync()
     {
+        var stackInfo = Signals.Options.Logging.CaptureStackInfo?.Invoke(this);
+        
         try
         {
             return this.DoRun().GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Exception occured during effect run");
+            try
+            {
+                var sigEx = new SignalException("Immediate effect run failed", ex);
+                
+                if (stackInfo is not null && Signals.Options.Logging.AugmentWithStackInfo is not null)
+                {
+                    Signals.Options.Logging.AugmentWithStackInfo(this, sigEx, stackInfo);
+                }
+                
+                throw sigEx;
+            }
+            catch (Exception ex2)
+            {
+                Logger.LogError(ex2, "{ErrorMessage}", ex2.Message);
+            }
         }
-
+    
         return false;
     }
     
