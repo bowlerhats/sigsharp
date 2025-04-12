@@ -16,8 +16,9 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
         TState state,
         ComputedFunctor<T, TState> calcFunctor,
         ComputedFunctor<Signal<T>, TState> wrappingFunctor,
-        ComputedSignalOptions opts = null
-    ) : base(group, default, opts)
+        ComputedSignalOptions opts = null,
+        string name = null
+    ) : base(group, default, opts, name)
     {
         ArgumentNullException.ThrowIfNull(state);
         

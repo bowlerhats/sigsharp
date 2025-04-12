@@ -50,7 +50,7 @@ public class SignalEffect : TrackingSignalNode
         SignalEffectOptions options = null,
         bool skipAutoStart = false,
         CancellationToken stopToken = default)
-        : base(group, false)
+        : base(group, false, name)
     {
         _effectFunctor = effectFunctor;
         

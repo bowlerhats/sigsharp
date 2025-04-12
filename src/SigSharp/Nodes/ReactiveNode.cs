@@ -6,8 +6,8 @@ public abstract class ReactiveNode : SignalNode
 {
     public SignalGroup Group { get; }
 
-    protected ReactiveNode(SignalGroup group, bool isTrackable)
-        : base(isTrackable)
+    protected ReactiveNode(SignalGroup group, bool isTrackable, string name)
+        : base(isTrackable, name)
     {
         ArgumentNullException.ThrowIfNull(group);
         ObjectDisposedException.ThrowIf(group.IsDisposed, group);

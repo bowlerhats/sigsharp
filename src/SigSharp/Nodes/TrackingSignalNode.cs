@@ -17,8 +17,8 @@ public abstract class TrackingSignalNode : ReactiveNode
     
     private bool _trackingDisabled;
     
-    protected TrackingSignalNode(SignalGroup group, bool isTrackable)
-        :base(group, isTrackable)
+    protected TrackingSignalNode(SignalGroup group, bool isTrackable, string name)
+        :base(group, isTrackable, name)
     {
         _store = new ConcurrentTrackerStore();
     }

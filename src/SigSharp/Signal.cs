@@ -29,8 +29,8 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     private T _value;
     private SignalObservable<T> _observable;
 
-    public Signal(T initialValue, SignalOptions opts = null)
-        : base(true)
+    public Signal(T initialValue, SignalOptions opts = null, string name = null)
+        : base(true, name)
     {
         _value = initialValue;
         

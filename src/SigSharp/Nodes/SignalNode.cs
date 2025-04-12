@@ -34,13 +34,17 @@ public abstract class SignalNode : IDisposable
     public bool WouldBeTracked { get; private set; }
     
     public bool IsTrackable { get; }
+    
+    public string Name { get; set; }
 
     protected readonly ILogger Logger;
     
     private readonly ConditionalWeakTable<SignalNode, object> _referencedBy = [];
     
-    protected SignalNode(bool isTrackable)
+    protected SignalNode(bool isTrackable, string name)
     {
+        this.Name = name;
+        
         Logger = Signals.Options.Logging.CreateLogger(this.GetType());
 
         this.IsTrackable = isTrackable;

@@ -31,9 +31,10 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     internal ComputedSignal(
         SignalGroup group,
         ComputedFunctor<T> functor,
-        ComputedSignalOptions opts = null
+        ComputedSignalOptions opts = null,
+        string name = null
         )
-        : base(group, true)
+        : base(group, true, name)
     {
         _functor = functor;
         

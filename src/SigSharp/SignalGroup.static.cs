@@ -11,9 +11,12 @@ public partial class SignalGroup
     private static readonly ConditionalWeakTable<object, SignalGroup> AnchoredGroups = new();
     private static readonly ConditionalWeakTable<SignalGroup, object> AllGroups = new();
 
-    public static SignalGroup Of<TAnchor>(TAnchor anchor, SignalGroupOptions opts = null)
+    public static SignalGroup Of<TAnchor>(TAnchor anchor, SignalGroupOptions opts = null, string name = null)
         where TAnchor: class
     {
+        if (anchor is null)
+            return null;
+        
         if (anchor is SignalGroup signalGroup)
             return signalGroup;
 
@@ -31,7 +34,9 @@ public partial class SignalGroup
         if (opts is null)
             return null;
 
-        anchoredGroup = new SignalGroup(anchor, opts);
+        name ??= $"{anchor.GetType().Name} (A)";
+
+        anchoredGroup = new SignalGroup(anchor, opts, name);
         
         AnchoredGroups.Add(anchor, anchoredGroup);
 

@@ -16,18 +16,20 @@ public sealed partial class SignalGroup: SignalNode
 
     public static SignalGroup Current => CurrentBoundGroup.Value;
     
-    public static SignalGroup CreateBound(SignalGroupOptions opts = null)
+    public static SignalGroup CreateBound(SignalGroupOptions opts = null, string name = null)
     {
-        var group = new SignalGroup(opts);
+        var group = new SignalGroup(opts, name);
         
         group.Bind();
         
         return group;
     }
 
-    public static SignalSuspender CreateSuspended(SignalGroupOptions opts = null)
+    public static SignalSuspender CreateSuspended(SignalGroupOptions opts = null, string name = null)
     {
-        var group = new SignalGroup(opts);
+        name ??= "Suspender";
+        
+        var group = new SignalGroup(opts, name);
         
         group.Bind();
     
@@ -45,8 +47,8 @@ public sealed partial class SignalGroup: SignalNode
     
     private SignalGroup _bindParent;
     
-    public SignalGroup(SignalGroupOptions opts = null)
-        : base(false)
+    public SignalGroup(SignalGroupOptions opts = null, string name = null)
+        : base(false, name)
     {
         this.Options = opts ?? SignalGroupOptions.Defaults;
 
@@ -64,8 +66,8 @@ public sealed partial class SignalGroup: SignalNode
         TrackGroup(this);
     }
     
-    public SignalGroup(object anchor, SignalGroupOptions opts = null)
-        :this(opts)
+    public SignalGroup(object anchor, SignalGroupOptions opts = null, string name = null)
+        :this(opts, name)
     {
         if (anchor is not null)
         {
@@ -177,7 +179,7 @@ public sealed partial class SignalGroup: SignalNode
 
         if (signal is null)
         {
-            signal = new ComputedSignal<T>(this, functor, opts);
+            signal = new ComputedSignal<T>(this, functor, opts, name);
             this.TrackComputed(signal, id);
         }
 
@@ -199,7 +201,7 @@ public sealed partial class SignalGroup: SignalNode
 
         if (signal is null)
         {
-            signal = new ComputedSignal<T, TState>(this, state, functor, opts);
+            signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
             this.TrackComputed(signal, id);
         }
 
@@ -228,7 +230,8 @@ public sealed partial class SignalGroup: SignalNode
                 state,
                 functor, 
                 wrappedFunctor,
-                opts);
+                opts,
+                name);
             
             this.TrackComputed(signal, id);
         }

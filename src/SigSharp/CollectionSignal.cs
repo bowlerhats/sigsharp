@@ -14,8 +14,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     public CollectionSignalOptions Options { get; }
     public TCollection BackingCollection { get; }
     
-    protected CollectionSignal(IEnumerable<T> initialValues, CollectionSignalOptions opts = null)
-        : base(true)
+    protected CollectionSignal(IEnumerable<T> initialValues, CollectionSignalOptions opts = null, string name = null)
+        : base(true, name)
     {
         this.Options = opts ?? CollectionSignalOptions.Defaults;
         

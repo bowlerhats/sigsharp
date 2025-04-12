@@ -13,8 +13,9 @@ public class ComputedSignal<T, TState> : ComputedSignal<T>
         SignalGroup group,
         TState state,
         ComputedFunctor<T, TState> functor,
-        ComputedSignalOptions opts = null
-    ) : base(group, default, opts)
+        ComputedSignalOptions opts = null,
+        string name = null
+    ) : base(group, default, opts, name)
     {
         ArgumentNullException.ThrowIfNull(state);
         
