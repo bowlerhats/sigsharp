@@ -18,6 +18,8 @@ public class SignalEffect : TrackingSignalNode
     public bool IsAutoRunning { get; private set; } = true;
 
     public override bool DisposedBySignalGroup => true;
+    
+    public string Name { get; }
 
     private readonly Stopwatch _scheduleTimer = new();
     
@@ -44,12 +46,15 @@ public class SignalEffect : TrackingSignalNode
     internal SignalEffect(
         SignalGroup group,
         SignalEffectFunctor effectFunctor,
+        string name = null,
         SignalEffectOptions options = null,
         bool skipAutoStart = false,
         CancellationToken stopToken = default)
         : base(group, false)
     {
         _effectFunctor = effectFunctor;
+        
+        this.Name = name;
         
         this.StopToken = stopToken;
         
@@ -110,16 +115,40 @@ public class SignalEffect : TrackingSignalNode
         base.Dispose(disposing);
     }
 
-    protected virtual async ValueTask InvokeRunnerFunc()
+    protected virtual async ValueTask<SignalEffectResult> InvokeRunnerFunc()
     {
         if (!_effectFunctor.IsValid)
         {
             this.StopAutoRun();
 
-            return;
+            return SignalEffectResult.Stop();
         }
 
-        await _effectFunctor.Invoke();
+        var effectResult = await _effectFunctor.Invoke();
+
+        return await this.HandleEffectResult(effectResult);
+    }
+
+    protected ValueTask<SignalEffectResult> HandleEffectResult(SignalEffectResult result)
+    {
+        if (result.ShouldStop || result.ShouldDestroy)
+        {
+            this.StopAutoRun();
+        }
+
+        if (result.ShouldDestroy)
+        {
+            Signals.Untracked(() =>
+            {
+                Task.Factory.StartNew(async () =>
+                {
+                    await Task.Delay(500, this.StopToken);
+                    this.Dispose();
+                }, this.StopToken);
+            });
+        }
+
+        return ValueTask.FromResult(result);
     }
     
     protected override void OnDirty()
@@ -378,10 +407,15 @@ public class SignalEffect : TrackingSignalNode
                             if (shouldMeasureRun)
                                 swRun.Start();
 
-                            await this.InvokeRunnerFunc();
+                            var effectResult = await this.InvokeRunnerFunc();
 
                             if (shouldMeasureRun)
                                 swRun.Stop();
+
+                            if (effectResult.ShouldDestroy)
+                            {
+                                return false;
+                            }
 
                             shouldRerun = tracker.Tracked.OfType<TrackingSignalNode>().Any(d => d.IsDirty);
 

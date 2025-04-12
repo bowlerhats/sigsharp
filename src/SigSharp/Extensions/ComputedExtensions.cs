@@ -220,8 +220,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<T> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -232,8 +232,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, T> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -245,8 +245,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, T> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -258,8 +258,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, T> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -275,8 +275,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<Signal<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -287,8 +287,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, Signal<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -308,8 +308,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, Signal<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class, IDisposable
@@ -329,8 +329,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, Signal<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class, IDisposable
@@ -346,8 +346,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<ValueTask<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -358,8 +358,8 @@ public static class ComputedExtensions
     public static T Computed<T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, ValueTask<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -371,8 +371,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -384,8 +384,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
@@ -398,8 +398,8 @@ public static class ComputedExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<Signal<T>>> func,
-        string name = null,
         ComputedSignalOptions opts = null,
+        string name = null,
         [CallerMemberName] string cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class

@@ -15,9 +15,10 @@ public sealed class SignalEffect<TState> : SignalEffect
         SignalGroup group,
         TState state,
         SignalEffectFunctor<TState> effectFunctor,
+        string name = null,
         SignalEffectOptions options = null,
         CancellationToken stopToken = default)
-        : base(group, default, options, true, stopToken)
+        : base(group, default, name, options, true, stopToken)
     {
         ArgumentNullException.ThrowIfNull(state);
         
@@ -39,15 +40,15 @@ public sealed class SignalEffect<TState> : SignalEffect
         base.Dispose(disposing);
     }
 
-    protected override async ValueTask InvokeRunnerFunc()
+    protected override async ValueTask<SignalEffectResult> InvokeRunnerFunc()
     {
         if (_state is null || !_stateEffectFunctor.IsValid)
         {
             this.StopAutoRun();
 
-            return;
+            return SignalEffectResult.Stop();
         }
 
-        await _stateEffectFunctor.Invoke(_state);
+        return await _stateEffectFunctor.Invoke(_state);
     }
 }
