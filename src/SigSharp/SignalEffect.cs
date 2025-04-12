@@ -19,8 +19,6 @@ public class SignalEffect : TrackingSignalNode
 
     public override bool DisposedBySignalGroup => true;
     
-    public string Name { get; }
-
     private readonly Stopwatch _scheduleTimer = new();
     
     private readonly long _debounceMs;
