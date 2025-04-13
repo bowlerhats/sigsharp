@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 		SigSharp.snk = SigSharp.snk
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigSharp.Tests", "SigSharp.Tests\SigSharp.Tests.csproj", "{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,5 +28,9 @@ Global
 		{F5F0E454-6DC1-4FF0-8139-C69BB2FF2242}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F5F0E454-6DC1-4FF0-8139-C69BB2FF2242}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F5F0E454-6DC1-4FF0-8139-C69BB2FF2242}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
