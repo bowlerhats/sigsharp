@@ -155,13 +155,15 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     
     public override string ToString()
     {
+        var name = this.Name ?? "noname";
+        
         if (this.IsDisposed)
-            return "disposed";
+            return $"{name} is disposed";
 
         var state = this.IsDirty ? "Dirty" : "Pristine";
         
         var v = _value;
         
-        return v is null ? $"null {state}" : $"{v} {state}";
+        return v is null ? $"{name}: null {state}" : $"{name}: {v} {state}";
     }
 }

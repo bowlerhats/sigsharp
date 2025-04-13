@@ -13,6 +13,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 		Directory.Build.props = Directory.Build.props
 		Directory.Build.targets = Directory.Build.targets
 		SigSharp.sln.DotSettings = SigSharp.sln.DotSettings
+		SigSharp.snk = SigSharp.snk
 	EndProjectSection
 EndProject
 Global
