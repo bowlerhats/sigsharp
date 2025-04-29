@@ -17,19 +17,19 @@ internal sealed class WeakNamedTrackerStore : INamedTrackerStore
         _disposed = true;
     }
 
-    public T LookupComputed<T>(ComputedSignalId id)
+    public T? LookupComputed<T>(ComputedSignalId id)
         where T : SignalNode
     {
         this.CheckDisposed();
         
-        WeakReference<SignalNode> nodeRef = _tracked.GetValueOrDefault(id);
+        var nodeRef = _tracked.GetValueOrDefault(id);
 
         if (nodeRef is null)
             return null;
         
         if (!nodeRef.TryGetTarget(out var node))
         {
-            _tracked.Remove(id, out WeakReference<SignalNode> _);
+            _tracked.Remove(id, out _);
 
             return null;
         }

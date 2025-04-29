@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using SigSharp.Nodes;
@@ -11,9 +12,38 @@ public partial class SignalGroup
     private static readonly ConditionalWeakTable<object, SignalGroup> AnchoredGroups = new();
     private static readonly ConditionalWeakTable<SignalGroup, object> AllGroups = new();
 
-    public static SignalGroup Of<TAnchor>(TAnchor anchor, SignalGroupOptions opts = null, string name = null)
+    public static SignalGroup Of<TAnchor>(TAnchor anchor, SignalGroupOptions opts, string? name = null)
         where TAnchor: class
     {
+        ArgumentNullException.ThrowIfNull(anchor);
+        
+        if (anchor is SignalGroup signalGroup)
+            return signalGroup;
+
+        if (anchor is ReactiveNode reactiveNode)
+            return reactiveNode.Group;
+
+        if (anchor is SignalNode)
+            throw new SignalException("Signal nodes cannot be anchors");
+        
+        if (AnchoredGroups.TryGetValue(anchor, out var anchoredGroup))
+        {
+            return anchoredGroup;
+        }
+        
+        name ??= $"{anchor.GetType().Name} (A)";
+
+        anchoredGroup = new SignalGroup(anchor, opts, name);
+        
+        AnchoredGroups.Add(anchor, anchoredGroup);
+
+        return anchoredGroup;
+    }
+    
+    public static SignalGroup? Of<TAnchor>(TAnchor anchor)
+        where TAnchor: class
+    {
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (anchor is null)
             return null;
         
@@ -30,17 +60,8 @@ public partial class SignalGroup
         {
             return anchoredGroup;
         }
-        
-        if (opts is null)
-            return null;
 
-        name ??= $"{anchor.GetType().Name} (A)";
-
-        anchoredGroup = new SignalGroup(anchor, opts, name);
-        
-        AnchoredGroups.Add(anchor, anchoredGroup);
-
-        return anchoredGroup;
+        return null;
     }
     
     public static IEnumerable<SignalGroup> GetAllGroups()

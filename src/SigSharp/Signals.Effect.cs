@@ -10,8 +10,8 @@ public static partial class Signals
     public static SignalEffect Effect(
         Action effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -28,8 +28,8 @@ public static partial class Signals
     public static SignalEffect Effect(
         Func<SignalEffectResult> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -46,8 +46,8 @@ public static partial class Signals
     public static SignalEffect Effect(
         Func<ValueTask> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -64,8 +64,8 @@ public static partial class Signals
     public static SignalEffect Effect(
         Func<ValueTask<SignalEffectResult>> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -83,8 +83,8 @@ public static partial class Signals
         TState state,
         Action<TState> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -103,8 +103,8 @@ public static partial class Signals
         TState state,
         Func<TState, SignalEffectResult> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -123,8 +123,8 @@ public static partial class Signals
         TState state,
         Func<TState, ValueTask> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -143,8 +143,8 @@ public static partial class Signals
         TState state,
         Func<TState, ValueTask<SignalEffectResult>> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
     {
         ArgumentNullException.ThrowIfNull(effectFunction);
@@ -163,8 +163,8 @@ public static partial class Signals
         TState state,
         Action<TState> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
         where TState: class
     {
@@ -184,8 +184,8 @@ public static partial class Signals
         TState state,
         Func<TState, SignalEffectResult> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
         where TState: class
     {
@@ -205,8 +205,8 @@ public static partial class Signals
         TState state,
         Func<TState, ValueTask> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
         where TState: class
     {
@@ -226,8 +226,8 @@ public static partial class Signals
         TState state,
         Func<TState, ValueTask<SignalEffectResult>> effectFunction,
         SignalGroup group,
-        SignalEffectOptions opts = null,
-        string name = null,
+        SignalEffectOptions? opts = null,
+        string? name = null,
         CancellationToken stopToken = default)
         where TState: class
     {

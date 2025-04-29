@@ -21,7 +21,7 @@ public sealed partial class GlobalSignalOptions
         /// <remarks>
         /// If it's null (by default it is null) it represents the NullLogger.
         /// </remarks>
-        public ILoggerFactory LoggerFactory { get; init; }
+        public ILoggerFactory? LoggerFactory { get; init; }
 
         /// <summary>
         /// Capture the originating stack trace when synchronously invoking effect's RunImmediate
@@ -34,7 +34,7 @@ public sealed partial class GlobalSignalOptions
         /// This function is called before the task run, when the current thread still has the
         /// invoker's synchronous frame chain.
         /// </remarks>
-        public Func<SignalNode, object> CaptureStackInfo { get; init; }
+        public Func<SignalNode, object>? CaptureStackInfo { get; init; }
         
         /// <summary>
         /// Custom action to perform when synchronously invoking effect's RunImmedate results in exception 
@@ -42,7 +42,7 @@ public sealed partial class GlobalSignalOptions
         /// <remarks>
         /// The object parameter contains the object returned by CaptureStackInfo.<br/>
         /// </remarks>
-        public Action<SignalNode, Exception, object> AugmentWithStackInfo { get; init; }
+        public Action<SignalNode, Exception, object>? AugmentWithStackInfo { get; init; }
         
         public ILogger CreateLogger(Type type)
         {

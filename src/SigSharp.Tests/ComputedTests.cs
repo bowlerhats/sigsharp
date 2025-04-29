@@ -5,6 +5,7 @@ using Shouldly;
 
 namespace SigSharp.Tests;
 
+[TestFixture]
 public class ComputedTests
 {
     [Test]

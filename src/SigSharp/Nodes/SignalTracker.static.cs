@@ -6,13 +6,13 @@ namespace SigSharp.Nodes;
 
 public partial class SignalTracker
 {
-    public static SignalTracker Current => CurrentTracker.Value;
+    public static SignalTracker? Current => CurrentTracker.Value;
 
     public static bool IsReadonlyContext => Current?.IsReadonly ?? false;
 
     private static ItemPool<SignalTracker> TrackerPool { get; } = new();
     
-    private static readonly AsyncLocal<SignalTracker> CurrentTracker = new();
+    private static readonly AsyncLocal<SignalTracker?> CurrentTracker = new();
 
     internal static SignalTracker Push(bool expectEmpty)
     {
@@ -32,7 +32,6 @@ public partial class SignalTracker
 
     internal static void Pop(SignalTracker expected)
     {
-        
         var tracker = Current;
         if (tracker is not null)
         {
@@ -47,7 +46,7 @@ public partial class SignalTracker
             throw new ArgumentOutOfRangeException(nameof(expected), "Popped tracker is not the expected one");
     }
 
-    internal static SignalTracker ReplaceWith(SignalTracker newTracker)
+    internal static SignalTracker? ReplaceWith(SignalTracker? newTracker)
     {
         var current = CurrentTracker.Value;
         CurrentTracker.Value = newTracker;

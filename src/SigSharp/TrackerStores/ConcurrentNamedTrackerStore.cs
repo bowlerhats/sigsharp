@@ -17,7 +17,7 @@ internal sealed class ConcurrentNamedTrackerStore : INamedTrackerStore
         _disposed = true;
     }
 
-    public T LookupComputed<T>(ComputedSignalId id)
+    public T? LookupComputed<T>(ComputedSignalId id)
         where T : SignalNode
     {
         this.CheckDisposed();

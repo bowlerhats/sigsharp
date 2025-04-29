@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SigSharp.Nodes;
 
 namespace SigSharp.Utils;
@@ -7,7 +9,7 @@ namespace SigSharp.Utils;
 public sealed class SignalSuspender : IDisposable, IAsyncDisposable
 {
     private readonly bool _alsoDisposeNode;
-    private SignalNode _node;
+    private SignalNode? _node;
     private bool _disposed;
     
     public SignalSuspender(SignalNode node, bool alsoDisposeNode)
@@ -26,24 +28,31 @@ public sealed class SignalSuspender : IDisposable, IAsyncDisposable
         if (_disposed)
             return;
         
-        _node.Resume();
+        _node?.Resume();
     }
     
     public void Dispose()
     {
         if (_disposed)
             return;
-        
-        this.Resume();
 
-        _disposed = true;
-
-        if (_alsoDisposeNode)
+        try
         {
-            _node?.Dispose();
+            this.Resume();
+        }
+        catch (Exception ex)
+        {
+            _node?.Logger.LogDebug(ex, "Suspender failed to resume node");
         }
 
-        _node = null;
+        if (Interlocked.Exchange(ref _disposed, true))
+            return;
+
+        var node = Interlocked.Exchange(ref _node, null);
+        if (_alsoDisposeNode)
+        {
+            node?.Dispose();
+        }
         
         GC.SuppressFinalize(this);
     }

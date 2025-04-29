@@ -2,8 +2,6 @@
 
 namespace SigSharp;
 
-
-
 public record SignalEffectOptions
 {
     public static SignalEffectOptions Defaults { get; } = new();
@@ -63,7 +61,7 @@ public record SignalEffectOptions
     /// ex.: When 5 reruns occured and 1 seconds elapsed since the start of reruns, then the effect will reschedule instead.<br />
     /// Use it in conjunction with RescheduleDelay to prevent heavy effects to choke the system. 
     /// </remarks>
-    public TimeSpan RerunYieldTimeLimit { get; init; } = TimeSpan.Zero; //= TimeSpan.FromSeconds(1); // = TimeSpan.Zero;
+    public TimeSpan RerunYieldTimeLimit { get; init; } = TimeSpan.Zero;
     
     /// <summary>
     /// Time to wait between reruns
@@ -78,5 +76,5 @@ public record SignalEffectOptions
     /// </remarks>
     public TimeSpan RescheduleDelay { get; init; } = TimeSpan.Zero;
     
-    public ISignalEffectScheduler EffectScheduler { get; init; }
+    public ISignalEffectScheduler? EffectScheduler { get; init; }
 }

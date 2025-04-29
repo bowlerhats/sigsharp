@@ -7,7 +7,7 @@ namespace SigSharp;
 
 public sealed class SignalEffect<TState> : SignalEffect
 {
-    private TState _state;
+    private TState? _state;
 
     private SignalEffectFunctor<TState> _stateEffectFunctor;
     
@@ -15,8 +15,8 @@ public sealed class SignalEffect<TState> : SignalEffect
         SignalGroup group,
         TState state,
         SignalEffectFunctor<TState> effectFunctor,
-        string name = null,
-        SignalEffectOptions options = null,
+        string? name = null,
+        SignalEffectOptions? options = null,
         CancellationToken stopToken = default)
         : base(group, default, name, options, true, stopToken)
     {

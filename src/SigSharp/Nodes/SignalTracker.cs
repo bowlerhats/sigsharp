@@ -15,7 +15,7 @@ public sealed partial class SignalTracker
     private readonly ConcurrentHashSet<SignalNode> _touchedNodes = [];
     private readonly ConcurrentHashSet<SignalNode> _changedNodes = [];
 
-    private SignalTracker _parent;
+    private SignalTracker? _parent;
     private bool _isReadonly;
 
     private bool _isTracking = true;
@@ -142,7 +142,7 @@ public sealed partial class SignalTracker
         return this;
     }
 
-    private SignalTracker Init(SignalTracker parent)
+    private SignalTracker Init(SignalTracker? parent)
     {
         this.Reset();
 

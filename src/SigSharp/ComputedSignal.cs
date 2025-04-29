@@ -23,16 +23,16 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
     private readonly SemaphoreSlim _updateLock = new(1);
     private readonly IEqualityComparer<T> _comparer;
-    private T _value;
-    private SignalObservable<T> _observable;
+    private T _value = default!;
+    private SignalObservable<T>? _observable;
 
     private ComputedFunctor<T> _functor;
 
     internal ComputedSignal(
         SignalGroup group,
         ComputedFunctor<T> functor,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
         : base(group, true, name)
     {
@@ -73,7 +73,7 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
         this.MarkTracked();
         
         if (this.IsDisposed)
-            return default;
+            return default!;
         
         if (this.HasTracking && !this.IsDirty)
             return _value;
@@ -83,14 +83,11 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
     public T Update()
     {
-        ValueTask<T> res = this.UpdateAsync();
+        var update = this.UpdateAsync();
 
-        if (res.IsCompletedSuccessfully)
-        {
-            return res.Result;
-        }
-        
-        return res.AsTask().GetAwaiter().GetResult();
+        return update.IsCompletedSuccessfully
+            ? update.Result
+            : update.AsTask().GetAwaiter().GetResult();
     }
     
     public async ValueTask<T> UpdateAsync()
@@ -100,15 +97,20 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
         this.MarkTracked();
 
         var oldValue = _value;
-
-        if (!await _updateLock.WaitAsync(TimeSpan.FromSeconds(2)))
+        
+        // allow brief synchronous wait to try to avoid Task overhead if possible
+        // ReSharper disable once MethodHasAsyncOverload
+        if (!_updateLock.Wait(TimeSpan.FromMilliseconds(5)))
         {
-            if (!this.IsDirty)
+            if (!await _updateLock.WaitAsync(TimeSpan.FromSeconds(2)))
             {
-                this.MarkDirty();
-            }
+                if (!this.IsDirty)
+                {
+                    this.MarkDirty();
+                }
 
-            return _value;
+                return _value;
+            }
         }
 
         try

@@ -13,7 +13,7 @@ public abstract class SignalNode : IDisposable
 {
     internal static readonly object EmptyObject = new();
     
-    public static IEqualityComparer<T> AsGenericComparer<T>(IEqualityComparer comparer)
+    public static IEqualityComparer<T> AsGenericComparer<T>(IEqualityComparer? comparer)
     {
         return comparer switch
         {
@@ -35,13 +35,13 @@ public abstract class SignalNode : IDisposable
     
     public bool IsTrackable { get; }
     
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
-    protected readonly ILogger Logger;
+    protected internal readonly ILogger Logger;
     
     private readonly ConditionalWeakTable<SignalNode, object> _referencedBy = [];
     
-    protected SignalNode(bool isTrackable, string name)
+    protected SignalNode(bool isTrackable, string? name)
     {
         this.Name = name;
         

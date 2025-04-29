@@ -5,10 +5,10 @@ using System.Threading.Tasks;
 namespace SigSharp.Utils;
 
 internal readonly record struct SignalEffectFunctor(
-    Action AsAction = null,
-    Func<SignalEffectResult> AsReturnAction = null,
-    Func<ValueTask> AsValueTask = null,
-    Func<ValueTask<SignalEffectResult>> AsReturnValueTask = null 
+    Action? AsAction = null,
+    Func<SignalEffectResult>? AsReturnAction = null,
+    Func<ValueTask>? AsValueTask = null,
+    Func<ValueTask<SignalEffectResult>>? AsReturnValueTask = null 
 )
 {
     private bool IsAction => this.AsAction is not null;
@@ -23,19 +23,19 @@ internal readonly record struct SignalEffectFunctor(
     {
         if (this.IsAction)
         {
-            this.AsAction();
+            this.AsAction!();
         }
         else if (this.IsReturnAction)
         {
-            return this.AsReturnAction();
+            return this.AsReturnAction!();
         }
         else if (this.IsValueTask)
         {
-            await this.AsValueTask();
+            await this.AsValueTask!();
         }
         else if (this.IsReturnValueTask)
         {
-            return await this.AsReturnValueTask();
+            return await this.AsReturnValueTask!();
         }
         else
         {
@@ -67,10 +67,10 @@ internal readonly record struct SignalEffectFunctor(
 }
 
 internal readonly record struct SignalEffectFunctor<TState>(
-    Action<TState> AsAction = null,
-    Func<TState, SignalEffectResult> AsReturnAction = null,
-    Func<TState, ValueTask> AsValueTask = null,
-    Func<TState, ValueTask<SignalEffectResult>> AsReturnValueTask = null
+    Action<TState>? AsAction = null,
+    Func<TState, SignalEffectResult>? AsReturnAction = null,
+    Func<TState, ValueTask>? AsValueTask = null,
+    Func<TState, ValueTask<SignalEffectResult>>? AsReturnValueTask = null
 )
 {
     public bool IsAction => this.AsAction is not null;
@@ -85,19 +85,19 @@ internal readonly record struct SignalEffectFunctor<TState>(
     {
         if (this.IsAction)
         {
-            this.AsAction(state);
+            this.AsAction!(state);
         }
         else if (this.IsReturnAction)
         {
-            return this.AsReturnAction(state);
+            return this.AsReturnAction!(state);
         }
         else if (this.IsValueTask)
         {
-            await this.AsValueTask(state);
+            await this.AsValueTask!(state);
         }
         else if (this.IsReturnValueTask)
         {
-            return await this.AsReturnValueTask(state);
+            return await this.AsReturnValueTask!(state);
         }
         else
         {

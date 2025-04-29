@@ -10,8 +10,8 @@ public static partial class Signals
         TState state,
         Func<TState, T> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -25,8 +25,8 @@ public static partial class Signals
         TState state,
         Func<TState, ValueTask<T>> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -39,8 +39,8 @@ public static partial class Signals
     public static ComputedSignal<T> Computed<T>(
         Func<T> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(func);
@@ -52,8 +52,8 @@ public static partial class Signals
     public static ComputedSignal<T> Computed<T>(
         Func<ValueTask<T>> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(func);
@@ -65,8 +65,8 @@ public static partial class Signals
     public static ComputedSignal<T> Computed<T>(
         Func<Signal<T>> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(func);
@@ -78,8 +78,8 @@ public static partial class Signals
     public static ComputedSignal<T> Computed<T>(
         Func<ValueTask<Signal<T>>> func,
         SignalGroup group,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
         )
     {
         ArgumentNullException.ThrowIfNull(func);

@@ -17,7 +17,7 @@ public abstract class TrackingSignalNode : ReactiveNode
     
     private bool _trackingDisabled;
     
-    protected TrackingSignalNode(SignalGroup group, bool isTrackable, string name)
+    protected TrackingSignalNode(SignalGroup group, bool isTrackable, string? name)
         :base(group, isTrackable, name)
     {
         _store = new ConcurrentTrackerStore();
@@ -29,7 +29,7 @@ public abstract class TrackingSignalNode : ReactiveNode
         {
             _store.Clear();
             _store.Dispose();
-            _store = null;
+            _store = null!;
         }
         
         base.Dispose(disposing);
@@ -152,10 +152,7 @@ public abstract class TrackingSignalNode : ReactiveNode
         {
             this.CheckDisposed();
             
-            if (tracker is not null)
-            {
-                this.UpdateTrackerStore(tracker.Tracked);
-            }
+            this.UpdateTrackerStore(tracker.Tracked);
         }
         finally
         {
@@ -174,15 +171,24 @@ public abstract class TrackingSignalNode : ReactiveNode
             _store.UnTrack(node);
         }
 
+        var allowDisposed = this.Group.Options.AllowsDisposedTracking;
+        SignalNode? disposed = null;
+        
         foreach (var node in nodes.Except(_store.Tracked))
         {
+            if (!allowDisposed && node.IsDisposed)
+            {
+                disposed ??= node;
+                continue;
+            }
+            
             node.AddReferencedBy(this);
             _store.Track(node);
         }
-        
-        if (!this.Group.Options.AllowsDisposedTracking)
+
+        if (!allowDisposed)
         {
-            var disposed = this.Tracked.FirstOrDefault(d => d.IsDisposed);
+            disposed ??= this.Tracked.FirstOrDefault(d => d.IsDisposed);
             if (disposed is not null)
             {
                 ObjectDisposedException.ThrowIf(disposed.IsDisposed, disposed);

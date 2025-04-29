@@ -27,9 +27,9 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     private readonly IEqualityComparer<T> _comparer;
     
     private T _value;
-    private SignalObservable<T> _observable;
+    private SignalObservable<T>? _observable;
 
-    public Signal(T initialValue, SignalOptions opts = null, string name = null)
+    public Signal(T initialValue, SignalOptions? opts = null, string? name = null)
         : base(true, name)
     {
         _value = initialValue;
@@ -39,8 +39,8 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         _comparer = AsGenericComparer<T>(this.Options.EqualityComparer);
     }
     
-    public Signal(SignalOptions opts = null)
-        : this(default, opts)
+    public Signal(SignalOptions? opts = null)
+        : this(default!, opts)
     {
     }
 
@@ -51,7 +51,7 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
             _observable?.Dispose();
             _observable = null;
             
-            _value = default;
+            _value = default!;
         }
 
         base.Dispose(disposing);
@@ -66,15 +66,12 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     {
         this.MarkTracked();
         
-        if (this.IsDisposed)
-            return default;
-        
         return _value;
     }
 
     public void SetDefault()
     {
-        this.Set(default);
+        this.Set(default!);
     }
     
     public void Set(T value)
@@ -114,8 +111,6 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         if (this.IsDisposed)
             return "disposed";
         
-        var v = _value;
-        
-        return v is null ? "null" : v.ToString();
+        return _value?.ToString() ?? "null";
     }
 }

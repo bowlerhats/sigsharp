@@ -9,18 +9,17 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
 {
     public IEnumerable<SignalNode> Tracked => _tracked;
     
-    public bool IsDisposed { get; private set; }
-    
     private readonly ConcurrentHashSet<SignalNode> _tracked = [];
+    private bool _disposed;
 
     public void Dispose()
     {
-        if (this.IsDisposed)
+        if (_disposed)
             return;
         
         _tracked.Clear();
 
-        this.IsDisposed = true;
+        _disposed = true;
     }
 
     public void Clear()
@@ -51,6 +50,6 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
 
     private void CheckDisposed()
     {
-        ObjectDisposedException.ThrowIf(this.IsDisposed, this);
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

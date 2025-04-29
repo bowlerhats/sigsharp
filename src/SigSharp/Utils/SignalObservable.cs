@@ -1,7 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace SigSharp.Utils;
 
@@ -16,6 +16,11 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
     {
         _value = initialValue;
     }
+
+    ~SignalObservable()
+    {
+        this.Dispose();
+    }
     
     public void OnNext(T value)
     {
@@ -24,7 +29,7 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
 
         _value = value;
 
-        foreach ((_, IObserver<T> observer) in _subscriptions)
+        foreach (var (_, observer) in _subscriptions)
         {
             try
             {
@@ -41,21 +46,30 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
     {
         if (_disposed)
             return;
-        
-        _disposed = true;
 
-        KeyValuePair<IDisposable, IObserver<T>>[] subs = _subscriptions.ToArray();
+        if (Interlocked.Exchange(ref _disposed, true))
+            return;
+        
+        var subs = _subscriptions.ToArray();
         
         _subscriptions.Clear();
-        _subscriptions = null;
+        _subscriptions = null!;
         
-        _value = default;
+        _value = default!;
         
-        foreach ((var subscription, IObserver<T> observer) in subs)
+        foreach (var (subscription, observer) in subs)
         {
-            observer.OnCompleted();
-            subscription.Dispose();
+            try
+            {
+                observer.OnCompleted();
+            }
+            finally
+            {
+                subscription.Dispose();
+            }
         }
+        
+        GC.SuppressFinalize(this);
     }
     
     public IDisposable Subscribe(IObserver<T> observer)
@@ -82,7 +96,7 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
 
     private sealed class Subscription : IDisposable
     {
-        private SignalObservable<T> _observable;
+        private SignalObservable<T>? _observable;
         private bool _disposed;
 
         public Subscription(SignalObservable<T> observable)
@@ -92,9 +106,6 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
 
         ~Subscription()
         {
-            if (!_disposed)
-                return;
-            
             this.Dispose();
         }
         
@@ -102,9 +113,10 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
         {
             if (_disposed)
                 return;
-            
-            _disposed = true;
-            
+
+            if (Interlocked.Exchange(ref _disposed, true))
+                return;
+
             _observable?.Disposed(this);
             _observable = null;
             

@@ -36,16 +36,16 @@ public class SignalEffect : TrackingSignalNode
     private readonly ISignalEffectScheduler _effectScheduler;
 
     private readonly CancellationTokenRegistration _tokenRegistration;
-    private TaskCompletionSource _asTask;
+    private TaskCompletionSource? _asTask;
 
     private bool _canSchedule = true;
-    private Timer _debounceTimer;
+    private Timer? _debounceTimer;
     
     internal SignalEffect(
         SignalGroup group,
         SignalEffectFunctor effectFunctor,
-        string name = null,
-        SignalEffectOptions options = null,
+        string? name = null,
+        SignalEffectOptions? options = null,
         bool skipAutoStart = false,
         CancellationToken stopToken = default)
         : base(group, false, name)
@@ -104,10 +104,10 @@ public class SignalEffect : TrackingSignalNode
             _effectFunctor = default;
             
             _idle.Dispose();
-            _idle = null;
+            _idle = null!;
             
             _runLock.Dispose();
-            _runLock = null;
+            _runLock = null!;
         }
         
         base.Dispose(disposing);
@@ -596,13 +596,13 @@ public class SignalEffect : TrackingSignalNode
             || (SignalGroup.Current?.TryQueueSuspended(this) ?? false);
     }
     
-    private static void TimerTick(object state)
+    private static void TimerTick(object? state)
     {
-        if (state is SignalEffect effect)
-        {
-            effect.CancelTimer();
+        if (state is not SignalEffect effect)
+            return;
+        
+        effect.CancelTimer();
             
-            effect.Schedule(true);
-        }
+        effect.Schedule(true);
     }
 }

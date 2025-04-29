@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 namespace SigSharp.Utils;
 
 internal readonly record struct ComputedFunctor<T>(
-    Func<T> AsAction = null,
-    Func<ValueTask<T>> AsValueTask = null
+    Func<T>? AsAction = null,
+    Func<ValueTask<T>>? AsValueTask = null
 )
 {
     public bool IsAction => this.AsAction is not null;
@@ -19,15 +19,15 @@ internal readonly record struct ComputedFunctor<T>(
     {
         if (this.IsAction)
         {
-            return this.AsAction();
+            return this.AsAction!();
         }
 
         if (this.IsValueTask)
         {
-            return await this.AsValueTask();
+            return await this.AsValueTask!();
         }
 
-        return default;
+        return default!;
     }
     
     public static ComputedFunctor<T> Of(Func<T> action)
@@ -42,8 +42,8 @@ internal readonly record struct ComputedFunctor<T>(
 }
 
 internal readonly record struct ComputedFunctor<T, TState>(
-    Func<TState, T> AsAction = null,
-    Func<TState, ValueTask<T>> AsValueTask = null
+    Func<TState, T>? AsAction = null,
+    Func<TState, ValueTask<T>>? AsValueTask = null
 )
 {
     public bool IsAction => this.AsAction is not null;
@@ -56,25 +56,25 @@ internal readonly record struct ComputedFunctor<T, TState>(
     {
         if (this.IsAction)
         {
-            var res = this.AsAction(state);
+            var res = this.AsAction!(state);
 
             return ValueTask.FromResult(res);
         }
 
         if (this.IsValueTask)
         {
-            return this.AsValueTask(state);
+            return this.AsValueTask!(state);
         }
 
-        return ValueTask.FromResult<T>(default);
+        return ValueTask.FromResult<T>(default!);
     }
     
-    public static ComputedFunctor<T, TState> Of(Func<TState, T> action)
+    public static ComputedFunctor<T, TState> Of(Func<TState, T>? action)
     {
         return new ComputedFunctor<T, TState>(action);
     }
 
-    public static ComputedFunctor<T, TState> Of(Func<TState, ValueTask<T>> func)
+    public static ComputedFunctor<T, TState> Of(Func<TState, ValueTask<T>>? func)
     {
         return new ComputedFunctor<T, TState>(null, func);
     }

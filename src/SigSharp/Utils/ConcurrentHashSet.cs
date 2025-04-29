@@ -8,6 +8,7 @@ using System.Linq;
 namespace SigSharp.Utils;
 
 internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection<T>
+    where T: notnull
 {
     private readonly ConcurrentDictionary<T, bool> _dict;
     
@@ -63,7 +64,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public bool Contains(T item)
     {
-        return item is not null && _dict.ContainsKey(item);
+        return _dict.ContainsKey(item);
     }
     
     public void CopyTo(T[] array, int arrayIndex)
@@ -79,7 +80,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     public AlternateLookup<TAlternate> GetAlternateLookup<TAlternate>()
         where TAlternate : notnull, allows ref struct
     {
-        ConcurrentDictionary<T, bool>.AlternateLookup<TAlternate> alt = _dict.GetAlternateLookup<TAlternate>();
+        var alt = _dict.GetAlternateLookup<TAlternate>();
 
         return new AlternateLookup<TAlternate>(alt);
     }
@@ -100,7 +101,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     }
 
     public readonly struct AlternateLookup<TAlternate>
-        where TAlternate : allows ref struct
+        where TAlternate : notnull, allows ref struct
     {
         private readonly ConcurrentDictionary<T, bool>.AlternateLookup<TAlternate> _alt;
         

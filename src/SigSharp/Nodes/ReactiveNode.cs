@@ -6,7 +6,7 @@ public abstract class ReactiveNode : SignalNode
 {
     public SignalGroup Group { get; }
 
-    protected ReactiveNode(SignalGroup group, bool isTrackable, string name)
+    protected ReactiveNode(SignalGroup group, bool isTrackable, string? name)
         : base(isTrackable, name)
     {
         ArgumentNullException.ThrowIfNull(group);

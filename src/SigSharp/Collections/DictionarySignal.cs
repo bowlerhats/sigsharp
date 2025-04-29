@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SigSharp;
 
@@ -21,12 +22,17 @@ public class DictionarySignal<TKey, TValue>
     IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys => this.BackingCollection.Keys;
 
     IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => this.BackingCollection.Values;
-    
-    public DictionarySignal(IEnumerable<KeyValuePair<TKey, TValue>> initialValues, CollectionSignalOptions opts = null)
-        :base(initialValues, opts)
+
+    public DictionarySignal(IEnumerable<KeyValuePair<TKey, TValue>> initialValues, CollectionSignalOptions? opts = null)
+        : base(initialValues, opts)
     {
     }
-    
+
+    public DictionarySignal(CollectionSignalOptions? opts = null)
+        : this([], opts)
+    {
+    }
+
     protected override ConcurrentDictionary<TKey, TValue> CreateBackingCollection(
         IEnumerable<KeyValuePair<TKey, TValue>> initialValues)
     {
@@ -50,7 +56,7 @@ public class DictionarySignal<TKey, TValue>
         return this.BackingCollection.ContainsKey(key);
     }
     
-    public bool TryGetValue(TKey key, out TValue value)
+    public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         this.MarkTracked();
         
@@ -75,12 +81,10 @@ public class DictionarySignal<TKey, TValue>
         return this.ContainsKey(key);
     }
 
-    bool IReadOnlyDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value)
+    bool IReadOnlyDictionary<TKey, TValue>.TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         this.MarkTracked();
         
         return this.TryGetValue(key, out value);
     }
-
-    
 }

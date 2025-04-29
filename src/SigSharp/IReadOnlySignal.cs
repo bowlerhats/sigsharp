@@ -13,11 +13,11 @@ public interface IReadOnlySignal : IDisposable
 
 public interface IReadOnlySignal<out T> : IReadOnlySignal
 {
-    T Value { get; }
-    T Get();
+    T? Value { get; }
+    T? Get();
     
-    T Untracked { get; }
-    T GetUntracked();
+    T? Untracked { get; }
+    T? GetUntracked();
     
-    IObservable<T> AsObservable();
+    IObservable<T?> AsObservable();
 }

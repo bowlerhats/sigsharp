@@ -4,8 +4,8 @@ namespace SigSharp;
 
 public record SignalGroupOptions
 {
-    private static SignalGroupOptions _defaults;
-    private static SignalGroupOptions _weakTracked;
+    private static SignalGroupOptions? _defaults;
+    private static SignalGroupOptions? _weakTracked;
 
     public static SignalGroupOptions Defaults => _defaults ??= new SignalGroupOptions();
     public static SignalGroupOptions WeakTracked => _weakTracked ??= new SignalGroupOptions { WeakTrack = true };
@@ -16,5 +16,5 @@ public record SignalGroupOptions
 
     public bool AutoResumeSuspendedEffects { get; init; } = true;
 
-    public Action<SignalGroup, object> DisposeLinker { get; init; }
+    public Action<SignalGroup, object>? DisposeLinker { get; init; }
 }

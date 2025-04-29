@@ -6,15 +6,15 @@ namespace SigSharp;
 
 public class ComputedSignal<T, TState> : ComputedSignal<T>
 {
-    private TState _state;
+    private TState? _state;
     private ComputedFunctor<T, TState> _stateFunctor;
     
     internal ComputedSignal(
         SignalGroup group,
         TState state,
         ComputedFunctor<T, TState> functor,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
     ) : base(group, default, opts, name)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -29,7 +29,6 @@ public class ComputedSignal<T, TState> : ComputedSignal<T>
         if (disposing)
         {
             _state = default;
-            
             _stateFunctor = default;
         }
         
@@ -39,7 +38,7 @@ public class ComputedSignal<T, TState> : ComputedSignal<T>
     protected override async ValueTask<T> CalcValue()
     {
         if (_state is null || !_stateFunctor.IsValid)
-            return default;
+            return default!;
 
         return await _stateFunctor.Invoke(_state);
     }

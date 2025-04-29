@@ -4,13 +4,14 @@ using SigSharp.Utils;
 namespace SigSharp;
 
 public class HashSetSignal<T> : CollectionSignal<T, ICollection<T>>
+    where T: notnull
 {
-    public HashSetSignal(CollectionSignalOptions opts = null)
+    public HashSetSignal(CollectionSignalOptions? opts = null)
         :base([], opts: opts)
     {
     }
     
-    public HashSetSignal(IEnumerable<T> initialValues, CollectionSignalOptions opts = null)
+    public HashSetSignal(IEnumerable<T> initialValues, CollectionSignalOptions? opts = null)
         :base(initialValues, opts)
     {
     }

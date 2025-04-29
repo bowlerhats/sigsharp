@@ -9,8 +9,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Action func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -26,8 +26,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<SignalEffectResult> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -43,8 +43,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<ValueTask> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -60,8 +60,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<ValueTask<SignalEffectResult>> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -77,8 +77,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, ValueTask> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -94,8 +94,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, ValueTask<SignalEffectResult>> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -111,8 +111,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Action<TAnchor> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -128,8 +128,8 @@ public static class SignalEffectExtensions
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, SignalEffectResult> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -146,8 +146,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -164,8 +164,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<SignalEffectResult>> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -182,8 +182,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Action<TState> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -200,8 +200,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, SignalEffectResult> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -218,8 +218,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -237,8 +237,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<SignalEffectResult>> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class
@@ -256,8 +256,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Action<TState> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
         )
         where TAnchor: class
@@ -275,8 +275,8 @@ public static class SignalEffectExtensions
         this TAnchor anchor,
         TState state,
         Func<TState, SignalEffectResult> func,
-        SignalEffectOptions effectOptions = null,
-        string name = null,
+        SignalEffectOptions? effectOptions = null,
+        string? name = null,
         CancellationToken stopToken = default
     )
         where TAnchor: class

@@ -8,7 +8,7 @@ public sealed record ComputedSignalIdRef(ComputedSignalId Id);
 
 internal interface INamedTrackerStore : IDisposable
 {
-    T LookupComputed<T>(ComputedSignalId id)
+    T? LookupComputed<T>(ComputedSignalId id)
         where T : SignalNode;
     
     void Clear();

@@ -15,8 +15,8 @@ public sealed class WeakSignalEffect<TState> : SignalEffect
         SignalGroup group,
         TState state,
         SignalEffectFunctor<TState> effectFunctor,
-        string name = null,
-        SignalEffectOptions options = null,
+        string? name = null,
+        SignalEffectOptions? options = null,
         CancellationToken stopToken = default)
         : base(group, default, name, options, true, stopToken)
     {
@@ -33,7 +33,6 @@ public sealed class WeakSignalEffect<TState> : SignalEffect
     {
         if (disposing)
         {
-            _state = null;
             _stateEffectFunctor = default;
         }
         
@@ -42,7 +41,7 @@ public sealed class WeakSignalEffect<TState> : SignalEffect
     
     protected override async ValueTask<SignalEffectResult> InvokeRunnerFunc()
     {
-        if (_state is null || !_stateEffectFunctor.IsValid || !_state.TryGetTarget(out var state))
+        if (!_stateEffectFunctor.IsValid || !_state.TryGetTarget(out var state))
         {
             this.StopAutoRun();
 

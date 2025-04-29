@@ -12,11 +12,11 @@ namespace SigSharp;
 
 public sealed partial class SignalGroup: SignalNode
 {
-    private static readonly AsyncLocal<SignalGroup> CurrentBoundGroup = new();
+    private static readonly AsyncLocal<SignalGroup?> CurrentBoundGroup = new();
 
-    public static SignalGroup Current => CurrentBoundGroup.Value;
+    public static SignalGroup? Current => CurrentBoundGroup.Value;
     
-    public static SignalGroup CreateBound(SignalGroupOptions opts = null, string name = null)
+    public static SignalGroup CreateBound(SignalGroupOptions? opts = null, string? name = null)
     {
         var group = new SignalGroup(opts, name);
         
@@ -25,7 +25,7 @@ public sealed partial class SignalGroup: SignalNode
         return group;
     }
 
-    public static SignalSuspender CreateSuspended(SignalGroupOptions opts = null, string name = null)
+    public static SignalSuspender CreateSuspended(SignalGroupOptions? opts = null, string? name = null)
     {
         name ??= "Suspender";
         
@@ -45,9 +45,9 @@ public sealed partial class SignalGroup: SignalNode
 
     private readonly ConcurrentQueue<SignalEffect> _queued = new();
     
-    private SignalGroup _bindParent;
+    private SignalGroup? _bindParent;
     
-    public SignalGroup(SignalGroupOptions opts = null, string name = null)
+    public SignalGroup(SignalGroupOptions? opts = null, string? name = null)
         : base(false, name)
     {
         this.Options = opts ?? SignalGroupOptions.Defaults;
@@ -65,14 +65,11 @@ public sealed partial class SignalGroup: SignalNode
 
         TrackGroup(this);
     }
-    
-    public SignalGroup(object anchor, SignalGroupOptions opts = null, string name = null)
-        :this(opts, name)
+
+    public SignalGroup(object anchor, SignalGroupOptions? opts = null, string? name = null)
+        : this(opts, name)
     {
-        if (anchor is not null)
-        {
-            this.Options.DisposeLinker?.Invoke(this, anchor);
-        }
+        this.Options.DisposeLinker?.Invoke(this, anchor);
     }
 
     public override void Resume()
@@ -169,7 +166,7 @@ public sealed partial class SignalGroup: SignalNode
         ComputedFunctor<T> functor,
         string name,
         int line,
-        ComputedSignalOptions opts = null)
+        ComputedSignalOptions? opts = null)
     {
         this.CheckDisposed();
         
@@ -177,11 +174,11 @@ public sealed partial class SignalGroup: SignalNode
 
         var signal = this.LookupComputed<ComputedSignal<T>>(id);
 
-        if (signal is null)
-        {
-            signal = new ComputedSignal<T>(this, functor, opts, name);
-            this.TrackComputed(signal, id);
-        }
+        if (signal is not null)
+            return signal;
+        
+        signal = new ComputedSignal<T>(this, functor, opts, name);
+        this.TrackComputed(signal, id);
 
         return signal;
     }
@@ -191,7 +188,7 @@ public sealed partial class SignalGroup: SignalNode
         ComputedFunctor<T, TState> functor,
         string name,
         int line,
-        ComputedSignalOptions opts = null)
+        ComputedSignalOptions? opts = null)
     {
         this.CheckDisposed();
         
@@ -199,11 +196,11 @@ public sealed partial class SignalGroup: SignalNode
 
         var signal = this.LookupComputed<ComputedSignal<T, TState>>(id);
 
-        if (signal is null)
-        {
-            signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
-            this.TrackComputed(signal, id);
-        }
+        if (signal is not null)
+            return signal;
+        
+        signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
+        this.TrackComputed(signal, id);
 
         return signal;
     }
@@ -214,7 +211,7 @@ public sealed partial class SignalGroup: SignalNode
         ComputedFunctor<Signal<T>, TState> wrappedFunctor,
         string name,
         int line,
-        ComputedSignalOptions opts = null)
+        ComputedSignalOptions? opts = null)
         where TState: class
     {
         this.CheckDisposed();
@@ -223,23 +220,23 @@ public sealed partial class SignalGroup: SignalNode
 
         var signal = this.LookupComputed<WeakComputedSignal<T, TState>>(id);
 
-        if (signal is null)
-        {
-            signal = new WeakComputedSignal<T, TState>(
-                this,
-                state,
-                functor, 
-                wrappedFunctor,
-                opts,
-                name);
+        if (signal is not null)
+            return signal;
+        
+        signal = new WeakComputedSignal<T, TState>(
+            this,
+            state,
+            functor,
+            wrappedFunctor,
+            opts,
+            name);
             
-            this.TrackComputed(signal, id);
-        }
+        this.TrackComputed(signal, id);
 
         return signal;
     }
 
-    private T LookupComputed<T>(ComputedSignalId id)
+    private T? LookupComputed<T>(ComputedSignalId id)
         where T: SignalNode
     {
         return _namedStore.LookupComputed<T>(id);

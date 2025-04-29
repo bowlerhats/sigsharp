@@ -10,18 +10,17 @@ public sealed class WeakTrackerStore : ITrackerStore
 {
     public IEnumerable<SignalNode> Tracked => _tracked.Select(static d => d.Key);
     
-    public bool IsDisposed { get; private set; }
-    
     private readonly ConditionalWeakTable<SignalNode, object> _tracked = [];
-
+    private bool _disposed;
+    
     public void Dispose()
     {
-        if (this.IsDisposed)
+        if (_disposed)
             return;
         
         _tracked.Clear();
         
-        this.IsDisposed = true;
+        _disposed = true;
     }
 
     public void Clear()
@@ -52,6 +51,6 @@ public sealed class WeakTrackerStore : ITrackerStore
 
     private void CheckDisposed()
     {
-        ObjectDisposedException.ThrowIf(this.IsDisposed, this);
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

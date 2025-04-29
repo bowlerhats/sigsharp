@@ -16,8 +16,8 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
         TState state,
         ComputedFunctor<T, TState> calcFunctor,
         ComputedFunctor<Signal<T>, TState> wrappingFunctor,
-        ComputedSignalOptions opts = null,
-        string name = null
+        ComputedSignalOptions? opts = null,
+        string? name = null
     ) : base(group, default, opts, name)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -32,8 +32,6 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
     {
         if (disposing)
         {
-            _state = null;
-
             _calcFunctor = default;
             _wrappingFunctor = default;
         }
@@ -43,8 +41,8 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
 
     protected override async ValueTask<T> CalcValue()
     {
-        if (_state is null || !_state.TryGetTarget(out var state))
-            return default;
+        if (!_state.TryGetTarget(out var state))
+            return default!;
 
         if (_wrappingFunctor.IsValid)
             return (await _wrappingFunctor.Invoke(state)).Get();

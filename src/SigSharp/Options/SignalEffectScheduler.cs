@@ -9,7 +9,7 @@ public interface ISignalEffectScheduler
     bool Schedule(SignalEffect effect, Func<Task> effectRunFunction, CancellationToken stopToken = default);
 }
 
-public class SignalEffectScheduler : ISignalEffectScheduler
+public sealed class SignalEffectScheduler : ISignalEffectScheduler
 {
     public static SignalEffectScheduler Default { get; } = new();
     
