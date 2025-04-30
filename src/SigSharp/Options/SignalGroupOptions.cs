@@ -12,8 +12,6 @@ public record SignalGroupOptions
     
     public bool WeakTrack { get; init; }
     
-    public bool AllowsDisposedTracking { get; init; }
-
     public bool AutoResumeSuspendedEffects { get; init; } = true;
 
     public Action<SignalGroup, object>? DisposeLinker { get; init; }

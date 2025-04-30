@@ -91,7 +91,7 @@ public abstract class SignalNode : IDisposable
 
     public void MarkTracked()
     {
-        if (!this.IsTrackable)
+        if (!this.IsTrackable || this.IsDisposed)
             return;
         
         if (this.IsSuspended)

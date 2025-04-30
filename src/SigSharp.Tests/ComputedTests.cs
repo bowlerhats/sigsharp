@@ -144,29 +144,73 @@ public class ComputedTests
     public void CanNot_Compute_WhenDisposed()
     {
         using SignalGroup group = new();
-        var sig1 = new Signal<int>(1);
+        var sig1 = new Signal<int>(1,
+            SignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.Throw }
+            );
         var sig2 = new Signal<int>(10);
-        var c1 = Signals.Computed(() => sig1.Value + 1, group);
+        var c1 = Signals.Computed(() => sig1.Value + 1, group,
+            ComputedSignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.Throw }
+        );
         var c2 = Signals.Computed(() => sig2.Value + 10, group);
         var computed = Signals.Computed(() => c1.Value + c2.Value, group);
         computed.Value.ShouldBe(22);
         
         sig1.Dispose();
         
-        Assert.Throws<ObjectDisposedException>(() => computed.Value.ShouldBe(21));
+        c1.IsDirty.ShouldBe(true);
+        c2.IsDirty.ShouldBe(false);
+        computed.IsDirty.ShouldBe(true);
+        
+        Assert.Throws<ObjectDisposedException>(() => computed.Value.ShouldBe(22));
+        
+        computed.IsDirty.ShouldBe(true);
         
         c1.Dispose();
+        
+        computed.IsDirty.ShouldBe(true);
         
         Assert.Throws<ObjectDisposedException>(() => computed.Update());
 
     }
+    
     [Test]
     public void Can_Compute_EvenDisposed()
     {
-        SignalGroup group = new(SignalGroupOptions.Defaults with{ AllowsDisposedTracking = true });
+        SignalGroup group = new();
         Signal<int> sig1 = new(1);
+        sig1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        
         Signal<int> sig2 = new(10);
         var c1 = Signals.Computed(() => sig1.Value + 1, group);
+        c1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        
+        var c2 = group.Computed(() => sig2.Value + 10);
+        var computed = Signals.Computed(() => c1.Value + c2, group);
+        computed.Value.ShouldBe(22);
+        
+        sig1.Dispose();
+        
+        computed.Value.ShouldBe(22, "because sig1's last is 1");
+        
+        c1.Dispose();
+        
+        computed.Value.ShouldBe(22, "because c1 with sig1=0 is constant 1");
+    }
+    
+    [Test]
+    public void Can_Compute_EvenDisposed_UsingDefault()
+    {
+        SignalGroup group = new();
+        Signal<int> sig1 = new(1,
+            SignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.DefaultScalar }
+            );
+        Signal<int> sig2 = new(10);
+        var c1 = Signals.Computed(() => sig1.Value + 1, group,
+            ComputedSignalOptions.Defaults with
+            {
+                DisposedAccessStrategy = DisposedSignalAccess.Strategy.DefaultScalar
+            });
+        
         var c2 = group.Computed(() => sig2.Value + 10);
         var computed = Signals.Computed(() => c1.Value + c2, group);
         computed.Value.ShouldBe(22);
@@ -179,6 +223,30 @@ public class ComputedTests
         
         computed.Value.ShouldBe(20, "because c1 with sig1=0 is constant 1");
     }
+    
+    // [Test]
+    // public void Can_Compute_EvenDisposed_UsingLast()
+    // {
+    //     SignalGroup group = new(SignalGroupOptions.Defaults with{ AllowsDisposedTracking = true });
+    //     Signal<int> sig1 = new(1,
+    //         SignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.LastScalar }
+    //         );
+    //     Signal<int> sig2 = new(10);
+    //     var c1 = Signals.Computed(() => sig1.Value + 1, group,
+    //         ComputedSignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.LastScalar }
+    //         );
+    //     var c2 = group.Computed(() => sig2.Value + 10);
+    //     var computed = Signals.Computed(() => c1.Value + c2, group);
+    //     computed.Value.ShouldBe(22);
+    //     
+    //     sig1.Dispose();
+    //     
+    //     computed.Value.ShouldBe(22, "because sig1's last is 1");
+    //     
+    //     c1.Dispose();
+    //     
+    //     computed.Value.ShouldBe(22, "because c1 with sig1=1 is constant 2");
+    // }
 
     [Test]
     public void Can_Track_Conditionally()

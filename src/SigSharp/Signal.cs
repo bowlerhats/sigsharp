@@ -28,6 +28,7 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     
     private T _value;
     private SignalObservable<T>? _observable;
+    private DisposedSignalAccess.DisposedCapture<T> _disposedCapture;
 
     public Signal(T initialValue, SignalOptions? opts = null, string? name = null)
         : base(true, name)
@@ -50,6 +51,8 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         {
             _observable?.Dispose();
             _observable = null;
+
+            _disposedCapture = DisposedSignalAccess.Capture(_value, this, this.Options.DisposedAccessStrategy);
             
             _value = default!;
         }
@@ -64,8 +67,11 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     
     public T Get()
     {
-        this.MarkTracked();
+        if (this.IsDisposed)
+            return DisposedSignalAccess.Access(_disposedCapture, this);
         
+        this.MarkTracked();
+
         return _value;
     }
 

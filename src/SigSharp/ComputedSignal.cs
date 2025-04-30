@@ -25,6 +25,7 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     private readonly IEqualityComparer<T> _comparer;
     private T _value = default!;
     private SignalObservable<T>? _observable;
+    private DisposedSignalAccess.DisposedCapture<T> _disposedCapture;
 
     private ComputedFunctor<T> _functor;
 
@@ -53,6 +54,10 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
             _updateLock.Dispose();
             
             _functor = default;
+
+            _disposedCapture = DisposedSignalAccess.Capture(_value, this, this.Options.DisposedAccessStrategy);
+            
+            _value = default!;
         }
         
         base.Dispose(disposing);
@@ -70,10 +75,10 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
     public T Get()
     {
-        this.MarkTracked();
-        
         if (this.IsDisposed)
-            return default!;
+            return DisposedSignalAccess.Access(_disposedCapture, this);
+        
+        this.MarkTracked();
         
         if (this.HasTracking && !this.IsDirty)
             return _value;
@@ -83,6 +88,8 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
     public T Update()
     {
+        this.CheckDisposed();
+        
         var update = this.UpdateAsync();
 
         return update.IsCompletedSuccessfully

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using SigSharp.TrackerStores;
 using SigSharp.Utils;
@@ -42,9 +41,9 @@ public abstract class TrackingSignalNode : ReactiveNode
 
         if (_store.Contains(refNode))
         {
-            if (!this.Group.Options.AllowsDisposedTracking)
+            if (refNode.IsDisposed)
             {
-                ObjectDisposedException.ThrowIf(refNode.IsDisposed, refNode);
+                _store.UnTrack(refNode);
             }
             
             this.MarkDirty();
@@ -108,13 +107,8 @@ public abstract class TrackingSignalNode : ReactiveNode
 
     public void Track(SignalNode node)
     {
-        if (_trackingDisabled || node == this)
+        if (_trackingDisabled || node == this || node.IsDisposed)
             return;
-
-        if (!this.Group.Options.AllowsDisposedTracking)
-        {
-            ObjectDisposedException.ThrowIf(node.IsDisposed, node);
-        }
         
         node.AddReferencedBy(this);
         _store.Track(node);
@@ -164,35 +158,23 @@ public abstract class TrackingSignalNode : ReactiveNode
     {
         if (_trackingDisabled)
             return;
-        
-        foreach (var node in _store.Tracked.Except(nodes))
-        {
-            node.RemoveReferencedBy(this);
-            _store.UnTrack(node);
-        }
 
-        var allowDisposed = this.Group.Options.AllowsDisposedTracking;
-        SignalNode? disposed = null;
+        foreach (var trackedNode in _store.Tracked)
+        {
+            if (trackedNode.IsDisposed || !nodes.Contains(trackedNode))
+            {
+                trackedNode.RemoveReferencedBy(this);
+                _store.UnTrack(trackedNode);
+            }
+        }
         
         foreach (var node in nodes.Except(_store.Tracked))
         {
-            if (!allowDisposed && node.IsDisposed)
-            {
-                disposed ??= node;
+            if (node.IsDisposed)
                 continue;
-            }
             
             node.AddReferencedBy(this);
             _store.Track(node);
-        }
-
-        if (!allowDisposed)
-        {
-            disposed ??= this.Tracked.FirstOrDefault(d => d.IsDisposed);
-            if (disposed is not null)
-            {
-                ObjectDisposedException.ThrowIf(disposed.IsDisposed, disposed);
-            }
         }
     }
 }

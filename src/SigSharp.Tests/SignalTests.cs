@@ -23,15 +23,55 @@ public class SignalTests
     }
 
     [Test]
-    public void Can_ReadDefault_AfterDispose()
+    public void Can_ReadLastScalar_AfterDispose()
     {
         using Signal<int> signal = new(5);
+        signal.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
         signal.Value.ShouldBe(5);
         
         // ReSharper disable once DisposeOnUsingVariable
         signal.Dispose();
         
-        signal.Value.ShouldBe(0);
+        signal.Value.ShouldBe(5);
+    }
+    
+    [Test]
+    public void CanNot_ReadLastScalar_AfterDispose_NullableStruct()
+    {
+        using Signal<int?> signal = new(5);
+        signal.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        signal.Value.ShouldBe(5);
+        
+        // ReSharper disable once DisposeOnUsingVariable
+        signal.Dispose();
+        
+        Assert.Throws<ObjectDisposedException>(() => signal.Value.ShouldBe(5));
+    }
+    
+    [Test]
+    public void Can_ReadLastScalar_AfterDispose_WhenItIsString()
+    {
+        using Signal<string> signal = new("test");
+        signal.Value.ShouldBe("test");
+        
+        // ReSharper disable once DisposeOnUsingVariable
+        signal.Dispose();
+        
+        signal.Value.ShouldBe("test");
+    }
+    
+    [Test]
+    public void CanNot_ReadLastScalar_AfterDispose_WhenNullable()
+    {
+        object testObject = new();
+        
+        using Signal<object> signal = new(testObject);
+        signal.Value.ShouldBe(testObject);
+        
+        // ReSharper disable once DisposeOnUsingVariable
+        signal.Dispose();
+        
+        Assert.Throws<ObjectDisposedException>(() => signal.Value.ShouldBe(testObject));
     }
 
     [Test]
