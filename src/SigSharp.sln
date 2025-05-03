@@ -14,6 +14,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 		Directory.Build.targets = Directory.Build.targets
 		SigSharp.sln.DotSettings = SigSharp.sln.DotSettings
 		SigSharp.snk = SigSharp.snk
+		resharper_file_layout.xml = resharper_file_layout.xml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigSharp.Tests", "SigSharp.Tests\SigSharp.Tests.csproj", "{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}"
