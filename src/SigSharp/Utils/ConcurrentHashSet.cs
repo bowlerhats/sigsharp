@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Threading;
 
 namespace SigSharp.Utils;
 
@@ -14,7 +15,11 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     bool ICollection<T>.IsReadOnly => false;
     
-    public int Count => _dict.Count;
+    public int Count => _count;
+
+    public bool IsEmpy => _count <= 0;
+
+    private int _count;
     
     public ConcurrentHashSet()
     {
@@ -24,11 +29,13 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     public ConcurrentHashSet(IEnumerable<T> collection)
     {
         _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)));
+        _count = _dict.Count;
     }
     
     public ConcurrentHashSet(IEnumerable<T> collection, IEqualityComparer<T> comparer)
     {
         _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)), comparer);
+        _count = _dict.Count;
     }
     
     public ConcurrentHashSet(IEqualityComparer<T> comparer)
@@ -38,7 +45,14 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public IEnumerator<T> GetEnumerator()
     {
-        return _dict.Keys.GetEnumerator();
+        if (this.IsEmpy)
+            yield break;
+        
+        using var enumerator = _dict.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            yield return enumerator.Current.Key;
+        }
     }
 
     IEnumerator IEnumerable.GetEnumerator()
@@ -54,27 +68,49 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     public bool Add(T item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return _dict.TryAdd(item, true);
+        
+        if (!_dict.TryAdd(item, true))
+            return false;
+        
+        Interlocked.Increment(ref _count);
+        return true;
     }
     
     public void Clear()
     {
-        _dict.Clear();
+        if (this.IsEmpy)
+            return;
+        
+        Interlocked.Exchange(ref _count, 0);
+        foreach (var (key, _) in _dict)
+        {
+            _dict.Remove(key, out _);
+        }
     }
     
     public bool Contains(T item)
     {
-        return _dict.ContainsKey(item);
+        return !this.IsEmpy && _dict.ContainsKey(item);
     }
     
     public void CopyTo(T[] array, int arrayIndex)
     {
-        _dict.Keys.CopyTo(array, arrayIndex);
+        if (this.IsEmpy)
+            return;
+
+        foreach (var (key, _) in _dict)
+        {
+            array[arrayIndex++] = key;
+        }
     }
     
     public bool Remove(T item)
     {
-        return _dict.Remove(item, out _);
+        if (this.IsEmpy || !_dict.Remove(item, out _))
+            return false;
+
+        Interlocked.Decrement(ref _count);
+        return true;
     }
 
     public AlternateLookup<TAlternate> GetAlternateLookup<TAlternate>()

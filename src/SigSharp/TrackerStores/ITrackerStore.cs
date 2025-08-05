@@ -7,6 +7,8 @@ namespace SigSharp.TrackerStores;
 public interface ITrackerStore : IDisposable
 {
     IEnumerable<SignalNode> Tracked { get; }
+    
+    bool HasAny { get; }
 
     void Track(SignalNode node);
     

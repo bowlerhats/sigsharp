@@ -85,7 +85,7 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
         
         this.MarkTracked();
         
-        if (this.HasTracking && !this.IsDirty)
+        if (!this.IsDirty && this.HasTracking)
             return _value;
         
         return this.Update();

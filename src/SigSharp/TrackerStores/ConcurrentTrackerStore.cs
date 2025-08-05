@@ -8,7 +8,9 @@ namespace SigSharp.TrackerStores;
 public sealed class ConcurrentTrackerStore : ITrackerStore
 {
     public IEnumerable<SignalNode> Tracked => _tracked;
-    
+
+    public bool HasAny => !_tracked.IsEmpy;
+
     private readonly ConcurrentHashSet<SignalNode> _tracked = [];
     private bool _disposed;
 

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using SigSharp.TrackerStores;
 using SigSharp.Utils;
@@ -7,7 +8,7 @@ namespace SigSharp.Nodes;
 
 public abstract class TrackingSignalNode : ReactiveNode
 {
-    public bool HasTracking => _store.Tracked.Any();
+    public bool HasTracking => _store.HasAny;
     public bool IsDirty { get; private set; } = true;
     
     public IEnumerable<SignalNode> Tracked => _store.Tracked;
@@ -158,19 +159,22 @@ public abstract class TrackingSignalNode : ReactiveNode
     {
         if (_trackingDisabled)
             return;
-
-        foreach (var trackedNode in _store.Tracked)
+        
+        if (_store.HasAny)
         {
-            if (trackedNode.IsDisposed || !nodes.Contains(trackedNode))
+            foreach (var trackedNode in _store.Tracked)
             {
-                trackedNode.RemoveReferencedBy(this);
-                _store.UnTrack(trackedNode);
+                if (trackedNode.IsDisposed || !nodes.Contains(trackedNode))
+                {
+                    trackedNode.RemoveReferencedBy(this);
+                    _store.UnTrack(trackedNode);
+                }
             }
         }
-        
-        foreach (var node in nodes.Except(_store.Tracked))
+
+        foreach (var node in nodes)
         {
-            if (node.IsDisposed)
+            if (node.IsDisposed || _store.Contains(node))
                 continue;
             
             node.AddReferencedBy(this);

@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SigSharp.Tests", "SigSharp.Tests\SigSharp.Tests.csproj", "{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Benchmarks", "Benchmarks\Benchmarks.csproj", "{4C9D1C40-714F-42EE-BC31-A1A3870C529E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,5 +35,9 @@ Global
 		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{63CA9809-5DE6-41A3-9DAB-D3AF2F8561CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C9D1C40-714F-42EE-BC31-A1A3870C529E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C9D1C40-714F-42EE-BC31-A1A3870C529E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C9D1C40-714F-42EE-BC31-A1A3870C529E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C9D1C40-714F-42EE-BC31-A1A3870C529E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

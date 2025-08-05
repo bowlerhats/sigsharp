@@ -3,7 +3,7 @@
 <Project>
   
   <!-- Paths -->
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Benchmarks'">
     <SolutionRootPath Condition=" $(SolutionRootPath) == '' ">$(MSBuildThisFileDirectory.TrimEnd('\').Trimend('/'))</SolutionRootPath>
     <RootPath Condition="$(RootPath) == ''">$(SolutionRootPath)/..</RootPath>
     <DistPath Condition="$(DistPath) == ''">$(RootPath)/dist</DistPath>
@@ -13,7 +13,7 @@
     <BuildResultPath>$(DistPath)/bin</BuildResultPath>
   </PropertyGroup>
   
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Benchmarks'">
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <BaseOutputPath>$(BuildResultPath)</BaseOutputPath>
     <BaseIntermediateOutputPath>$(BuildIntermediatePath)\$(MSBuildProjectName)</BaseIntermediateOutputPath>

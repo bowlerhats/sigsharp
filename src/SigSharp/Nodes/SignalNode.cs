@@ -26,8 +26,6 @@ public abstract class SignalNode : IDisposable
     
     public virtual bool DisposedBySignalGroup { get; protected set; }
     
-    public IEnumerable<SignalNode> ReferencedBy => _referencedBy.Select(static d => d.Key);
-    
     public bool IsReferenced => _referencedBy.Any();
     
     public bool IsSuspended { get; private set; }
@@ -64,7 +62,7 @@ public abstract class SignalNode : IDisposable
         
         if (disposing)
         {
-            this.ReferencedBy.ForEach(d => d.ReferenceDisposed(this));
+            _referencedBy.ForEach(d => d.Key.ReferenceDisposed(this));
         
             _referencedBy.Clear();
         }
@@ -85,8 +83,11 @@ public abstract class SignalNode : IDisposable
     {
         if (this.IsDisposed)
             return;
-        
-        this.ReferencedBy.ForEach(d => d.ReferenceChanged(this));
+
+        foreach (var (node, _) in _referencedBy.AsEnumerable())
+        {
+            node.ReferenceChanged(this);
+        }
     }
 
     public void MarkTracked()

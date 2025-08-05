@@ -9,6 +9,8 @@ namespace SigSharp.TrackerStores;
 public sealed class WeakTrackerStore : ITrackerStore
 {
     public IEnumerable<SignalNode> Tracked => _tracked.Select(static d => d.Key);
+
+    public bool HasAny => _tracked.Any();
     
     private readonly ConditionalWeakTable<SignalNode, object> _tracked = [];
     private bool _disposed;
