@@ -133,14 +133,14 @@ public abstract class TrackingSignalNode : ReactiveNode
         _store.Clear();
     }
     
-    protected SignalTracker StartTrack(bool expecEmpty)
+    internal SignalTracker StartTrack(bool expecEmpty)
     {
         this.CheckDisposed();
 
         return SignalTracker.Push(expecEmpty);
     }
 
-    protected void EndTrack(SignalTracker tracker)
+    internal void EndTrack(SignalTracker tracker)
     {
         try
         {

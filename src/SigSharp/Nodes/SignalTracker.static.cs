@@ -4,7 +4,7 @@ using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
 
-public partial class SignalTracker
+internal partial class SignalTracker
 {
     public static SignalTracker? Current => CurrentTracker.Value;
 

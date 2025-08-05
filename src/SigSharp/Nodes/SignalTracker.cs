@@ -4,7 +4,7 @@ using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
 
-public sealed partial class SignalTracker
+internal sealed partial class SignalTracker
 {
     internal IReadOnlyCollection<SignalNode> Tracked => _touchedNodes;
     internal IReadOnlyCollection<SignalNode> Changed => _changedNodes;
