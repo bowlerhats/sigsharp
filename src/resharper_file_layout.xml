@@ -354,24 +354,24 @@
       </Entry.SortBy>
     </Entry>
 
-    <Region Name="${0} Members" Priority="100">
-      <Entry DisplayName="Explicit Interface Members">
-        <Entry.Match>
-          <And>
-            <Kind Is="Member" />
-            <ImplementsInterface Immediate="True" />
-          </And>
-        </Entry.Match>
+<!--    <Region Name="${0} Members" Priority="100">-->
+<!--      <Entry DisplayName="Explicit Interface Members">-->
+<!--        <Entry.Match>-->
+<!--          <And>-->
+<!--            <Kind Is="Member" />-->
+<!--            <ImplementsInterface Immediate="True" />-->
+<!--          </And>-->
+<!--        </Entry.Match>-->
 
-        <Entry.SortBy>
-          <ImplementsInterface Immediate="true" />
-        </Entry.SortBy>
-      </Entry>
-      
-      <Region.GroupBy>
-        <ImplementsInterface Immediate="True"/>
-      </Region.GroupBy>
-    </Region>
+<!--        <Entry.SortBy>-->
+<!--          <ImplementsInterface Immediate="true" />-->
+<!--        </Entry.SortBy>-->
+<!--      </Entry>-->
+<!--      -->
+<!--      <Region.GroupBy>-->
+<!--        <ImplementsInterface Immediate="True"/>-->
+<!--      </Region.GroupBy>-->
+<!--    </Region>-->
 
     <Entry DisplayName="All other members" />
 

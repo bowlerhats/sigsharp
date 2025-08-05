@@ -476,24 +476,24 @@
       &lt;/Entry.SortBy&gt;
     &lt;/Entry&gt;
 
-    &lt;Region Name="${0} Members" Priority="100"&gt;
-      &lt;Entry DisplayName="Explicit Interface Members"&gt;
-        &lt;Entry.Match&gt;
-          &lt;And&gt;
-            &lt;Kind Is="Member" /&gt;
-            &lt;ImplementsInterface Immediate="True" /&gt;
-          &lt;/And&gt;
-        &lt;/Entry.Match&gt;
+    &lt;!--    &lt;Region Name="${0} Members" Priority="100"&gt;--&gt;
+    &lt;!--      &lt;Entry DisplayName="Explicit Interface Members"&gt;--&gt;
+    &lt;!--        &lt;Entry.Match&gt;--&gt;
+    &lt;!--          &lt;And&gt;--&gt;
+    &lt;!--            &lt;Kind Is="Member" /&gt;--&gt;
+    &lt;!--            &lt;ImplementsInterface Immediate="True" /&gt;--&gt;
+    &lt;!--          &lt;/And&gt;--&gt;
+    &lt;!--        &lt;/Entry.Match&gt;--&gt;
 
-        &lt;Entry.SortBy&gt;
-          &lt;ImplementsInterface Immediate="true" /&gt;
-        &lt;/Entry.SortBy&gt;
-      &lt;/Entry&gt;
-
-      &lt;Region.GroupBy&gt;
-        &lt;ImplementsInterface Immediate="True"/&gt;
-      &lt;/Region.GroupBy&gt;
-    &lt;/Region&gt;
+    &lt;!--        &lt;Entry.SortBy&gt;--&gt;
+    &lt;!--          &lt;ImplementsInterface Immediate="true" /&gt;--&gt;
+    &lt;!--        &lt;/Entry.SortBy&gt;--&gt;
+    &lt;!--      &lt;/Entry&gt;--&gt;
+    &lt;!--      --&gt;
+    &lt;!--      &lt;Region.GroupBy&gt;--&gt;
+    &lt;!--        &lt;ImplementsInterface Immediate="True"/&gt;--&gt;
+    &lt;!--      &lt;/Region.GroupBy&gt;--&gt;
+    &lt;!--    &lt;/Region&gt;--&gt;
 
     &lt;Entry DisplayName="All other members" /&gt;
 
@@ -508,4 +508,8 @@
   &lt;/TypePattern&gt;
 &lt;/Patterns&gt;
 </s:String>
-	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002EMemberReordering_002EMigrations_002ECSharpFileLayoutPatternRemoveIsAttributeUpgrade/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ECSharpKeepExistingMigration/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ECSharpPlaceEmbeddedOnSameLineMigration/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ECSharpUseContinuousIndentInsideBracesMigration/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002EMemberReordering_002EMigrations_002ECSharpFileLayoutPatternRemoveIsAttributeUpgrade/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ESettingsUpgrade_002EMigrateBlankLinesAroundFieldToBlankLinesAroundProperty/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>
