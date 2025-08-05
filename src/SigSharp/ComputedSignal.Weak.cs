@@ -39,14 +39,25 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
         base.Dispose(disposing);
     }
 
-    protected override async ValueTask<T> CalcValue()
+    protected override T CalcValueSyncOnly()
     {
         if (!_state.TryGetTarget(out var state))
             return default!;
 
         if (_wrappingFunctor.IsValid)
-            return (await _wrappingFunctor.Invoke(state)).Get();
+            return _wrappingFunctor.InvokeSyncOnly(state).Get();
 
-        return await _calcFunctor.Invoke(state);
+        return _calcFunctor.InvokeSyncOnly(state);
+    }
+
+    protected override async ValueTask<T> CalcValueAsync()
+    {
+        if (!_state.TryGetTarget(out var state))
+            return default!;
+
+        if (_wrappingFunctor.IsValid)
+            return (await _wrappingFunctor.InvokeAsync(state)).Get();
+
+        return await _calcFunctor.InvokeAsync(state);
     }
 }

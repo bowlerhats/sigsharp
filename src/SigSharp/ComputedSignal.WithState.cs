@@ -35,12 +35,20 @@ public class ComputedSignal<T, TState> : ComputedSignal<T>
         base.Dispose(disposing);
     }
 
-    protected override async ValueTask<T> CalcValue()
+    protected override T CalcValueSyncOnly()
     {
         if (_state is null || !_stateFunctor.IsValid)
             return default!;
 
-        return await _stateFunctor.Invoke(_state);
+        return _stateFunctor.InvokeSyncOnly(_state);
+    }
+
+    protected override async ValueTask<T> CalcValueAsync()
+    {
+        if (_state is null || !_stateFunctor.IsValid)
+            return default!;
+
+        return await _stateFunctor.InvokeAsync(_state);
     }
     
     public static implicit operator T(ComputedSignal<T, TState> sig)

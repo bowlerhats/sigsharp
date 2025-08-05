@@ -15,7 +15,13 @@ internal readonly record struct ComputedFunctor<T>(
     public bool IsValid => this.IsAction || this.IsValueTask;
 
     [DebuggerStepThrough]
-    public async ValueTask<T> Invoke()
+    public T InvokeSyncOnly()
+    {
+        return this.IsAction ? this.AsAction!() : default!;
+    }
+    
+    [DebuggerStepThrough]
+    public async ValueTask<T> InvokeAsync()
     {
         if (this.IsAction)
         {
@@ -52,7 +58,13 @@ internal readonly record struct ComputedFunctor<T, TState>(
     public bool IsValid => this.IsAction || this.IsValueTask;
 
     [DebuggerStepThrough]
-    public ValueTask<T> Invoke(TState state)
+    public T InvokeSyncOnly(TState state)
+    {
+        return this.IsAction ? this.AsAction!(state) : default!;
+    }
+    
+    [DebuggerStepThrough]
+    public ValueTask<T> InvokeAsync(TState state)
     {
         if (this.IsAction)
         {

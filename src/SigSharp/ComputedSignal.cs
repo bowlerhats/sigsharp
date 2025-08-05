@@ -63,9 +63,14 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
         base.Dispose(disposing);
     }
 
-    protected virtual ValueTask<T> CalcValue()
+    protected virtual T CalcValueSyncOnly()
     {
-        return _functor.Invoke();
+        return _functor.InvokeSyncOnly();
+    }
+    
+    protected virtual ValueTask<T> CalcValueAsync()
+    {
+        return _functor.InvokeAsync();
     }
 
     public T GetUntracked()
@@ -90,11 +95,57 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     {
         this.CheckDisposed();
         
-        var update = this.UpdateAsync();
+        if (_functor.IsValueTask)
+        {
+            var update = this.UpdateAsync();
 
-        return update.IsCompletedSuccessfully
-            ? update.Result
-            : update.AsTask().GetAwaiter().GetResult();
+            return update.IsCompletedSuccessfully
+                ? update.Result
+                : update.AsTask().GetAwaiter().GetResult();
+        }
+        
+        this.MarkTracked();
+        
+        var oldValue = _value;
+
+        if (!_updateLock.Wait(TimeSpan.FromSeconds(2)))
+        {
+            if (!this.IsDirty)
+            {
+                this.MarkDirty();
+            }
+
+            return _value;
+        }
+
+        try
+        {
+            var tracker = this.StartTrack(false).Readonly();
+            try
+            {
+                _value = this.CalcValueSyncOnly();
+            }
+            finally
+            {
+                this.EndTrack(tracker);
+            }
+            
+            this.MarkPristine();
+        
+            var isChanged = !_comparer.Equals(_value, oldValue);
+            if (isChanged)
+            {
+                this.Changed();
+            
+                _observable?.OnNext(_value);
+            }
+        }
+        finally
+        {
+            _updateLock.Release();
+        }
+
+        return _value;
     }
     
     public async ValueTask<T> UpdateAsync()
@@ -122,11 +173,10 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
         try
         {
-
             var tracker = this.StartTrack(false).Readonly();
             try
             {
-                _value = await this.CalcValue();
+                _value = await this.CalcValueAsync();
             }
             finally
             {
