@@ -131,7 +131,7 @@ public async Task Load()
 
 3. Disposed value access handling
 
-Signals can be configured how to behave after they are disposed. By default they try to "rember" their last scalar value.
+Signals can be configured how to behave after they are disposed. By default they try to "remember" their last scalar value.
 
 4. Weak effect and weak computation support
 
