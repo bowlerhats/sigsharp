@@ -9,7 +9,7 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
 {
     public IEnumerable<SignalNode> Tracked => _tracked;
 
-    public bool HasAny => !_tracked.IsEmpy;
+    public bool HasAny => !_tracked.IsEmpty;
 
     private readonly ConcurrentHashSet<SignalNode> _tracked = [];
     private bool _disposed;

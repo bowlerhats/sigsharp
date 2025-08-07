@@ -17,7 +17,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public int Count => _count;
 
-    public bool IsEmpy => _count <= 0;
+    public bool IsEmpty => _count <= 0;
 
     private int _count;
     
@@ -45,7 +45,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public IEnumerator<T> GetEnumerator()
     {
-        if (this.IsEmpy)
+        if (this.IsEmpty)
             yield break;
         
         using var enumerator = _dict.GetEnumerator();
@@ -78,7 +78,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public void Clear()
     {
-        if (this.IsEmpy)
+        if (this.IsEmpty)
             return;
         
         Interlocked.Exchange(ref _count, 0);
@@ -90,12 +90,12 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public bool Contains(T item)
     {
-        return !this.IsEmpy && _dict.ContainsKey(item);
+        return !this.IsEmpty && _dict.ContainsKey(item);
     }
     
     public void CopyTo(T[] array, int arrayIndex)
     {
-        if (this.IsEmpy)
+        if (this.IsEmpty)
             return;
 
         foreach (var (key, _) in _dict)
@@ -106,7 +106,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public bool Remove(T item)
     {
-        if (this.IsEmpy || !_dict.Remove(item, out _))
+        if (this.IsEmpty || !_dict.Remove(item, out _))
             return false;
 
         Interlocked.Decrement(ref _count);

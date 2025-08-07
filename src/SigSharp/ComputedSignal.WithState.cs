@@ -6,6 +6,8 @@ namespace SigSharp;
 
 public class ComputedSignal<T, TState> : ComputedSignal<T>
 {
+    protected override bool IsAsyncFunctor => _stateFunctor.IsValueTask;
+    
     private TState? _state;
     private ComputedFunctor<T, TState> _stateFunctor;
     

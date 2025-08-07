@@ -21,6 +21,8 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
 
     public ComputedSignalOptions Options { get; }
 
+    protected virtual bool IsAsyncFunctor => _functor.IsValueTask;
+
     private readonly SemaphoreSlim _updateLock = new(1);
     private readonly IEqualityComparer<T> _comparer;
     private T _value = default!;
@@ -95,7 +97,7 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     {
         this.CheckDisposed();
         
-        if (_functor.IsValueTask)
+        if (this.IsAsyncFunctor)
         {
             var update = this.UpdateAsync();
 
