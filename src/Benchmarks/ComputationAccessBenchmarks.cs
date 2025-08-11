@@ -11,17 +11,31 @@ public class ComputationAccessBenchmarks
     
     private static BenchCalc _calc = new();
     private int _init;
+
+    private AsyncLocal<List<int>> _asyncLocal = new();
+    private List<int> _list = []; 
     
     [GlobalSetup]
     public void GlobalSetup()
     {
         _init = _calc.ByComputed + _calc.ByProperty;
     }
+
+    [Benchmark]
+    public void Access_AsyncLocal()
+    {
+        // To prove that majority of allocations are done by asynclocal, and not the lib
+        for (var i = 0; i < AccessIterations; i++)
+        {
+            _asyncLocal.Value = _list;
+            _asyncLocal.Value = null!;
+        }
+    }
     
     [Benchmark]
     public void AccessByProperty_JustRead()
     {
-        for (int i = 0; i < AccessIterations; i++)
+        for (var i = 0; i < AccessIterations; i++)
         {
             _init = Math.Min(2, _calc.ByProperty);
         }
@@ -30,7 +44,7 @@ public class ComputationAccessBenchmarks
     [Benchmark]
     public void AccessByComputed_JustRead()
     {
-        for (int i = 0; i < AccessIterations; i++)
+        for (var i = 0; i < AccessIterations; i++)
         {
             _init = Math.Min(2, _calc.ByComputed);
         }
@@ -39,7 +53,7 @@ public class ComputationAccessBenchmarks
     [Benchmark]
     public void AccessByComputed_WithMutation()
     {
-        for (int i = 0; i < AccessIterations; i++)
+        for (var i = 0; i < AccessIterations; i++)
         {
             _calc.Signal.Value += _init;
             _init = Math.Min(2, _calc.ByComputed);
@@ -49,7 +63,7 @@ public class ComputationAccessBenchmarks
     [Benchmark]
     public void AccessByProperty_WithMutation()
     {
-        for (int i = 0; i < AccessIterations; i++)
+        for (var i = 0; i < AccessIterations; i++)
         {
             _calc.Signal.Value += _init;
             _init = Math.Min(2, _calc.ByProperty);
@@ -58,9 +72,12 @@ public class ComputationAccessBenchmarks
 
     private sealed class BenchCalc
     {
+        // Use explicit group to avoid anchor lookup
+        public SignalGroup Group { get; } = new();
+        
         public int ByProperty => this.Signal.Value;
         
-        public int ByComputed => this.Computed(static c => c.Signal.Value);
+        public int ByComputed => this.Group.Computed(this, static c => c.Signal.Value);
         
         public Signal<int> Signal { get; } = new(1);
     }

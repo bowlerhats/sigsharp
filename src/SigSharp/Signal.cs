@@ -96,8 +96,6 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         
         this.Changed();
         
-        SignalTracker.Current?.TrackChanged(this);
-        
         _observable?.OnNext(_value);
     }
 

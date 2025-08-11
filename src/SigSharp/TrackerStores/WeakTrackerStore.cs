@@ -50,6 +50,22 @@ public sealed class WeakTrackerStore : ITrackerStore
         
         _tracked.Remove(node);
     }
+    
+    public void WithEach(Action<SignalNode> action)
+    {
+        foreach (var (node, _) in _tracked)
+        {
+            action(node);
+        }
+    }
+    
+    public void WithEach<TState>(TState state, Action<TState, SignalNode> action)
+    {
+        foreach (var (node, _) in _tracked)
+        {
+            action(state, node);
+        }
+    }
 
     private void CheckDisposed()
     {

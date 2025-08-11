@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using SigSharp.Utils;
@@ -25,8 +24,6 @@ public abstract class SignalNode : IDisposable
     public bool IsDisposed { get; private set; }
     
     public virtual bool DisposedBySignalGroup { get; protected set; }
-    
-    public bool IsReferenced => _referencedBy.Any();
     
     public bool IsSuspended { get; private set; }
     public bool WouldBeTracked { get; private set; }
@@ -62,8 +59,12 @@ public abstract class SignalNode : IDisposable
         
         if (disposing)
         {
-            _referencedBy.ForEach(d => d.Key.ReferenceDisposed(this));
-        
+            this.WithEachReferencing(this, static (@this, node) =>
+            {
+                if (!node.IsDisposed)
+                    node.ReferenceDisposed(@this);
+            });
+            
             _referencedBy.Clear();
         }
 
@@ -76,6 +77,22 @@ public abstract class SignalNode : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    protected void WithEachReferencing<TState>(TState state, Action<TState, SignalNode> action)
+    {
+        foreach (var (node, _) in _referencedBy)
+        {
+            action(state, node);
+        }
+    }
+    
+    protected void WithEachReferencing(Action<SignalNode> action)
+    {
+        foreach (var (node, _) in _referencedBy)
+        {
+            action(node);
+        }
+    }
+
     protected virtual void ReferenceChanged(SignalNode refNode) { }
     protected virtual void ReferenceDisposed(SignalNode refNode) { }
 
@@ -83,11 +100,10 @@ public abstract class SignalNode : IDisposable
     {
         if (this.IsDisposed)
             return;
-
-        foreach (var (node, _) in _referencedBy.AsEnumerable())
-        {
-            node.ReferenceChanged(this);
-        }
+        
+        SignalTracker.Current?.TrackChanged(this);
+        
+        this.WithEachReferencing(this, static (@this, node) => node.ReferenceChanged(@this));
     }
 
     public void MarkTracked()

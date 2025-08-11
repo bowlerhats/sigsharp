@@ -1,19 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using SigSharp.TrackerStores;
+﻿using SigSharp.TrackerStores;
 using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
 
 public abstract class TrackingSignalNode : ReactiveNode
 {
-    public bool HasTracking => _store.HasAny;
+    public bool HasTracking => _store?.HasAny ?? false;
     public bool IsDirty { get; private set; } = true;
     
-    public IEnumerable<SignalNode> Tracked => _store.Tracked;
-
-    private ITrackerStore _store;
+    private ITrackerStore? _store;
     
     private bool _trackingDisabled;
     
@@ -27,8 +22,8 @@ public abstract class TrackingSignalNode : ReactiveNode
     {
         if (disposing)
         {
-            _store.Clear();
-            _store.Dispose();
+            _store?.Clear();
+            _store?.Dispose();
             _store = null!;
         }
         
@@ -37,19 +32,11 @@ public abstract class TrackingSignalNode : ReactiveNode
 
     protected override void ReferenceChanged(SignalNode refNode)
     {
-        if (this.IsDisposed || _trackingDisabled)
+        if (this.IsDisposed || _trackingDisabled || refNode.IsDisposed)
             return;
-
-        if (_store.Contains(refNode))
-        {
-            if (refNode.IsDisposed)
-            {
-                _store.UnTrack(refNode);
-            }
-            
-            this.MarkDirty();
-        }
-
+        
+        this.MarkDirty();
+        
         base.ReferenceChanged(refNode);
     }
     
@@ -58,7 +45,7 @@ public abstract class TrackingSignalNode : ReactiveNode
         if (this.IsDisposed || _trackingDisabled)
             return;
 
-        if (_store.Contains(refNode))
+        if (_store?.Contains(refNode) ?? false)
         {
             _store.UnTrack(refNode);
             
@@ -67,8 +54,21 @@ public abstract class TrackingSignalNode : ReactiveNode
 
         base.ReferenceDisposed(refNode);
     }
-    
-    protected virtual void OnDirty() { }
+
+    protected virtual void OnDirty()
+    {
+        if (this.IsDisposed)
+            return;
+        
+        this.WithEachReferencing(static node =>
+                {
+                    if (node is TrackingSignalNode { IsDirty: false } trackingNode)
+                    {
+                        trackingNode.MarkDirty();
+                    }
+                }
+            );
+    }
 
     protected void DisableTracking()
     {
@@ -79,11 +79,12 @@ public abstract class TrackingSignalNode : ReactiveNode
     {
         newStore.Clear();
         
-        _store.Tracked.ForEach(newStore.Track);
+        _store?.WithEach(newStore, static (store, node) => store.Track(node));
+        
         var oldStore = _store;
         _store = newStore;
         
-        oldStore.Dispose();
+        oldStore?.Dispose();
     }
 
     public void MarkDirty()
@@ -92,8 +93,6 @@ public abstract class TrackingSignalNode : ReactiveNode
             return;
         
         this.IsDirty = true;
-        
-        this.Changed();
         
         this.OnDirty();
     }
@@ -112,7 +111,7 @@ public abstract class TrackingSignalNode : ReactiveNode
             return;
         
         node.AddReferencedBy(this);
-        _store.Track(node);
+        _store!.Track(node);
     }
 
     public void UnTrack(SignalNode node)
@@ -121,24 +120,24 @@ public abstract class TrackingSignalNode : ReactiveNode
             return;
         
         node.RemoveReferencedBy(this);
-        _store.UnTrack(node);
+        _store!.UnTrack(node);
     }
 
     public void ClearTracked()
     {
-        foreach (var node in _store.Tracked)
+        _store?.WithEach(this, static (@this, signalNode) =>
         {
-            node.RemoveReferencedBy(this);
-        }
+            signalNode.RemoveReferencedBy(@this);
+        });
         
-        _store.Clear();
+        _store?.Clear();
     }
     
-    internal SignalTracker StartTrack(bool expecEmpty)
+    internal SignalTracker StartTrack(bool expectEmpty)
     {
         this.CheckDisposed();
-
-        return SignalTracker.Push(expecEmpty);
+        
+        return SignalTracker.Push(expectEmpty);
     }
 
     internal void EndTrack(SignalTracker tracker)
@@ -155,30 +154,25 @@ public abstract class TrackingSignalNode : ReactiveNode
         }
     }
 
-    private void UpdateTrackerStore(IReadOnlyCollection<SignalNode> nodes)
+    private void UpdateTrackerStore(ConcurrentHashSet<SignalNode> nodes)
     {
         if (_trackingDisabled)
             return;
         
-        if (_store.HasAny)
+        _store?.WithEach((this, nodes), static (state, trackedNode) =>
         {
-            foreach (var trackedNode in _store.Tracked)
+            if (trackedNode.IsDisposed || !state.nodes.Contains(trackedNode))
             {
-                if (trackedNode.IsDisposed || !nodes.Contains(trackedNode))
-                {
-                    trackedNode.RemoveReferencedBy(this);
-                    _store.UnTrack(trackedNode);
-                }
+                state.Item1.UnTrack(trackedNode);
             }
-        }
-
+        });
+        
         foreach (var node in nodes)
         {
-            if (node.IsDisposed || _store.Contains(node))
+            if (node.IsDisposed || (_store?.Contains(node) ?? false))
                 continue;
-            
-            node.AddReferencedBy(this);
-            _store.Track(node);
+
+            this.Track(node);
         }
     }
 }

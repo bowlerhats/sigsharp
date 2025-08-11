@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -156,31 +155,28 @@ public class SignalEffect : TrackingSignalNode
         
         if (this.IsDisposed || this.StopToken.IsCancellationRequested)
             return;
+
+        if (SignalTracker.Current?.AcceptEffects ?? false)
+        {
+            SignalTracker.Current.PostEffect(this);
+
+            return;
+        }
+        
+        lock (_scheduleLock)
+        {
+            if (!_canSchedule || !_idle.IsSet)
+                return;
+        }
         
         if (_debounceMs <= 0)
         {
             this.Schedule();
-
+        
             return;
         }
-
-        if (!this.ExtendDebounce())
-        {
-            lock (_scheduleLock)
-            {
-                if (_canSchedule)
-                {
-                    if (this.StartDebounce())
-                    {
-                        this.StartScheduling();
-                    }
-                    else
-                    {
-                        this.Schedule();
-                    }
-                }
-            }
-        }
+        
+        this.ReScheduleDebounced();
     }
 
     private void StartScheduling()
@@ -279,6 +275,27 @@ public class SignalEffect : TrackingSignalNode
             }
         }
     }
+
+    private void ReScheduleDebounced()
+    {
+        if (this.ExtendDebounce())
+            return;
+        
+        lock (_scheduleLock)
+        {
+            if (_canSchedule)
+            {
+                if (this.StartDebounce())
+                {
+                    this.StartScheduling();
+                }
+                else
+                {
+                    this.Schedule();
+                }
+            }
+        }
+    }
     
     private void Schedule(bool forced)
     {
@@ -301,7 +318,7 @@ public class SignalEffect : TrackingSignalNode
 
                 if (!_canSchedule)
                     return;
-                
+
                 if (this.EnqueueAsSuspended())
                 {
                     _canSchedule = false;
@@ -372,14 +389,14 @@ public class SignalEffect : TrackingSignalNode
         {
             Logger.LogWarning("Unexpected signal tracker on stack");
         }
+        
+        ConcurrentHashSet<SignalEffect>? dirtyEffects = null;
 
         try
         {
             await _runLock.WaitAsync(this.StopToken);
             try
             {
-                this.MarkPristine();
-
                 var swTotal = new Stopwatch();
                 var swRun = new Stopwatch();
 
@@ -394,9 +411,12 @@ public class SignalEffect : TrackingSignalNode
 
                     do
                     {
+                        this.MarkPristine();
+                        
                         var tracker = this.StartTrack(true)
                             .Readonly(this.Options.PreventSignalChange)
                             .Recursive()
+                            .CollectEffects()
                             .EnableChangeTracking();
                         try
                         {
@@ -410,17 +430,42 @@ public class SignalEffect : TrackingSignalNode
                             if (shouldMeasureRun)
                                 swRun.Stop();
 
+                            if (!tracker.Effects.IsEmpty)
+                            {
+                                foreach (var effect in tracker.Effects)
+                                {
+                                    if (effect == this)
+                                        continue;
+
+                                    dirtyEffects ??= [];
+                                    dirtyEffects.Add(effect);
+                                }
+                            }
+                            
                             if (effectResult.ShouldDestroy)
                             {
                                 return false;
                             }
 
-                            shouldRerun = tracker.Tracked.OfType<TrackingSignalNode>().Any(d => d.IsDirty);
+                            shouldRerun = false;
 
-                            shouldRerun |= tracker.Tracked.OfType<IWritableSignal>()
-                                .Intersect(tracker.Changed.OfType<IWritableSignal>())
-                                .Any();
+                            foreach (var trackedNode in tracker.Tracked)
+                            {
+                                if (trackedNode is TrackingSignalNode { IsDirty: true })
+                                {
+                                    shouldRerun = true;
 
+                                    break;
+                                }
+
+                                if (trackedNode is IWritableSignal && tracker.Changed.Contains(trackedNode))
+                                {
+                                    shouldRerun = true;
+
+                                    break;
+                                }
+                            }
+                            
                             if (!shouldRerun)
                             {
                                 this.MarkPristine();
@@ -469,6 +514,14 @@ public class SignalEffect : TrackingSignalNode
             {
                 Logger.LogWarning("Leaked tracker!");
             }
+
+            if (dirtyEffects is not null)
+            {
+                foreach (var effect in dirtyEffects)
+                {
+                    effect.ReScheduleDebounced();
+                }
+            }
         }
 
         return shouldReschedule;
@@ -483,8 +536,8 @@ public class SignalEffect : TrackingSignalNode
                 Logger.LogWarning("Run was scheduled, but can still schedule?!");
             }    
         }
-        
-        bool shouldReschedule = false;
+
+        var shouldReschedule = false;
 
         try
         {

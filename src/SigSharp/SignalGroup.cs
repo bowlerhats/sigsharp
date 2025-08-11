@@ -38,8 +38,6 @@ public sealed partial class SignalGroup: SignalNode
     
     public SignalGroupOptions Options { get; }
 
-    public IEnumerable<SignalNode> Members => _memberStore.Tracked;
-    
     private readonly INamedTrackerStore _namedStore;
     private readonly ITrackerStore _memberStore;
 
@@ -114,13 +112,13 @@ public sealed partial class SignalGroup: SignalNode
                 this.ResumeEffects(true);
             }
             
-            foreach (var node in this.Members)
+            _memberStore.WithEach(static node =>
             {
-                if (!node.IsDisposed && node.DisposedBySignalGroup)
+                if (node is { IsDisposed: false, DisposedBySignalGroup: true })
                 {
                     node.Dispose();
                 }
-            }
+            });
             
             _memberStore.Clear();
             _memberStore.Dispose();
@@ -140,10 +138,7 @@ public sealed partial class SignalGroup: SignalNode
     {
         ArgumentNullException.ThrowIfNull(node);
         
-        if (this.IsDisposed)
-            return;
-
-        if (node == this)
+        if (this.IsDisposed || node == this)
             return;
         
         _memberStore.Track(node);
@@ -153,10 +148,7 @@ public sealed partial class SignalGroup: SignalNode
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        if (this.IsDisposed)
-            return;
-        
-        if (node == this)
+        if (this.IsDisposed || node == this)
             return;
         
         _memberStore.UnTrack(node);
@@ -168,14 +160,14 @@ public sealed partial class SignalGroup: SignalNode
         int line,
         ComputedSignalOptions? opts = null)
     {
-        this.CheckDisposed();
-        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<ComputedSignal<T>>(id);
 
         if (signal is not null)
             return signal;
+        
+        this.CheckDisposed();
         
         signal = new ComputedSignal<T>(this, functor, opts, name);
         this.TrackComputed(signal, id);
@@ -190,14 +182,14 @@ public sealed partial class SignalGroup: SignalNode
         int line,
         ComputedSignalOptions? opts = null)
     {
-        this.CheckDisposed();
-        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<ComputedSignal<T, TState>>(id);
 
         if (signal is not null)
             return signal;
+        
+        this.CheckDisposed();
         
         signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
         this.TrackComputed(signal, id);
@@ -214,14 +206,14 @@ public sealed partial class SignalGroup: SignalNode
         ComputedSignalOptions? opts = null)
         where TState: class
     {
-        this.CheckDisposed();
-        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<WeakComputedSignal<T, TState>>(id);
 
         if (signal is not null)
             return signal;
+        
+        this.CheckDisposed();
         
         signal = new WeakComputedSignal<T, TState>(
             this,

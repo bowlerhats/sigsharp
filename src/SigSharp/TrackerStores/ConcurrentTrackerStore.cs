@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -7,8 +6,6 @@ namespace SigSharp.TrackerStores;
 
 public sealed class ConcurrentTrackerStore : ITrackerStore
 {
-    public IEnumerable<SignalNode> Tracked => _tracked;
-
     public bool HasAny => !_tracked.IsEmpty;
 
     private readonly ConcurrentHashSet<SignalNode> _tracked = [];
@@ -48,6 +45,28 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
         this.CheckDisposed();
         
         _tracked.Remove(node);
+    }
+
+    public void WithEach(Action<SignalNode> action)
+    {
+        if (_tracked.IsEmpty)
+            return;
+        
+        foreach (var node in _tracked)
+        {
+            action(node);
+        }
+    }
+    
+    public void WithEach<TState>(TState state, Action<TState, SignalNode> action)
+    {
+        if (_tracked.IsEmpty)
+            return;
+        
+        foreach (var node in _tracked)
+        {
+            action(state, node);
+        }
     }
 
     private void CheckDisposed()

@@ -106,8 +106,6 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
                 : update.AsTask().GetAwaiter().GetResult();
         }
         
-        this.MarkTracked();
-        
         var oldValue = _value;
 
         if (!_updateLock.Wait(TimeSpan.FromSeconds(2)))
@@ -154,8 +152,6 @@ public class ComputedSignal<T> : TrackingSignalNode, IReadOnlySignal<T>
     {
         this.CheckDisposed();
         
-        this.MarkTracked();
-
         var oldValue = _value;
         
         // allow brief synchronous wait to try to avoid Task overhead if possible

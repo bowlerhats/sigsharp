@@ -12,47 +12,68 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     where T: notnull
 {
     private readonly ConcurrentDictionary<T, bool> _dict;
+
+    private bool _isSmall = true;
+    private readonly SmallSet<T> _set;
     
     bool ICollection<T>.IsReadOnly => false;
-    
-    public int Count => _count;
 
-    public bool IsEmpty => _count <= 0;
+    public int Count => _isSmall ? _set.Count : _count;
+
+    public bool IsEmpty => _isSmall ? _set.IsEmpty : _count <= 0;
 
     private int _count;
     
     public ConcurrentHashSet()
     {
-        _dict = new ConcurrentDictionary<T, bool>();
+        _set = [];
+        _dict = [];
     }
 
     public ConcurrentHashSet(IEnumerable<T> collection)
     {
-        _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)));
-        _count = _dict.Count;
+        if (_isSmall)
+        {
+            _set = new SmallSet<T>(collection);
+            _dict = [];
+        }
+        else
+        {
+            _set = [];
+            _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)));
+            _count = _dict.Count;
+        }
     }
     
     public ConcurrentHashSet(IEnumerable<T> collection, IEqualityComparer<T> comparer)
     {
-        _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)), comparer);
-        _count = _dict.Count;
+        if (_isSmall)
+        {
+            _set = new SmallSet<T>(collection, comparer);
+            _dict = [];
+        }
+        else
+        {
+            _set = [];
+            _dict = new ConcurrentDictionary<T, bool>(collection.Select(d => new KeyValuePair<T, bool>(d, true)), comparer);
+            _count = _dict.Count;
+        }
     }
     
     public ConcurrentHashSet(IEqualityComparer<T> comparer)
     {
+        _set = new SmallSet<T>(comparer);
         _dict = new ConcurrentDictionary<T, bool>(comparer);
     }
-    
-    public IEnumerator<T> GetEnumerator()
+
+    public Enumerator GetEnumerator()
     {
-        if (this.IsEmpty)
-            yield break;
-        
-        using var enumerator = _dict.GetEnumerator();
-        while (enumerator.MoveNext())
-        {
-            yield return enumerator.Current.Key;
-        }
+        return new Enumerator(this);
+    }
+    
+    IEnumerator<T> IEnumerable<T>.GetEnumerator()
+    {
+        return new Enumerator(this);
     }
 
     IEnumerator IEnumerable.GetEnumerator()
@@ -68,33 +89,66 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     public bool Add(T item)
     {
         ArgumentNullException.ThrowIfNull(item);
+
+        if (_isSmall && _set.Add(item))
+            return true;
         
         if (!_dict.TryAdd(item, true))
             return false;
-        
+
         Interlocked.Increment(ref _count);
+        
+        if (Interlocked.CompareExchange(ref _isSmall, false, true))
+        {
+            foreach (var setItem in _set)
+            {
+                _dict.TryAdd(setItem, true);
+            }
+            
+            _set.Clear();
+
+            Interlocked.Exchange(ref _count, _dict.Count);
+        }
+        
         return true;
     }
     
     public void Clear()
     {
-        if (this.IsEmpty)
+        if (_isSmall)
+        {
+            _set.Clear();
             return;
+        }
+
+        if (Interlocked.CompareExchange(ref _isSmall, true, false))
+        {
+            _set.Clear();
+        }
         
         Interlocked.Exchange(ref _count, 0);
         foreach (var (key, _) in _dict)
         {
-            _dict.Remove(key, out _);
+            _dict.Remove(key, out var _);
         }
     }
     
     public bool Contains(T item)
     {
+        if (_isSmall)
+            return _set.Contains(item);
+            
         return !this.IsEmpty && _dict.ContainsKey(item);
     }
     
     public void CopyTo(T[] array, int arrayIndex)
     {
+        if (_isSmall)
+        {
+            _set.CopyTo(array, arrayIndex);
+            return;
+        }
+        
         if (this.IsEmpty)
             return;
 
@@ -106,6 +160,11 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     
     public bool Remove(T item)
     {
+        if (_isSmall)
+        {
+            return _set.Remove(item);
+        }
+        
         if (this.IsEmpty || !_dict.Remove(item, out _))
             return false;
 
@@ -164,6 +223,75 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
         public bool TryGetValue(TAlternate equalValue, [MaybeNullWhen(false)] out T actualValue)
         {
             return _alt.TryGetValue(equalValue, out actualValue, out _);
+        }
+    }
+    
+    public struct Enumerator : IEnumerator<T>
+    {
+        public T Current { get; private set; } = default!;
+        
+        object? IEnumerator.Current => this.Current;
+
+        private readonly IEnumerator<KeyValuePair<T, bool>> _dictEnumerator = null!;
+        private SmallSet<T>.Enumerator _setEnumerator;
+        
+        private readonly bool _isSmall;
+
+        public Enumerator(ConcurrentHashSet<T> hashSet)
+        {
+            _isSmall = hashSet._isSmall;
+            if (!_isSmall)
+            {
+                _dictEnumerator = hashSet._dict.GetEnumerator();
+            }
+            else
+            {
+                _setEnumerator = hashSet._set.GetEnumerator();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_isSmall)
+            {
+                _setEnumerator.Dispose();
+            }
+            else
+            {
+                _dictEnumerator.Dispose();
+            }
+        }
+
+        public bool MoveNext()
+        {
+            if (!_isSmall)
+            {
+                if (!_dictEnumerator.MoveNext())
+                    return false;
+                
+                this.Current = _dictEnumerator.Current.Key;
+                return true;
+            }
+
+            var setEnumerator = _setEnumerator;
+
+            if (!setEnumerator.MoveNext())
+                return false;
+
+            this.Current = setEnumerator.Current;
+
+            _setEnumerator = setEnumerator;
+
+            return true;
+        }
+
+        public void Reset()
+        {
+            var setEnumerator = _setEnumerator;
+            setEnumerator.Reset();
+            _setEnumerator = setEnumerator;
+            
+            _dictEnumerator.Reset();
         }
     }
 }

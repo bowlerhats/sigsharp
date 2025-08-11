@@ -1,19 +1,18 @@
 ﻿using System;
-using System.Collections.Generic;
 using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
 
 internal sealed partial class SignalTracker
 {
-    internal IReadOnlyCollection<SignalNode> Tracked => _touchedNodes;
-    internal IReadOnlyCollection<SignalNode> Changed => _changedNodes;
+    internal ConcurrentHashSet<SignalNode> Tracked { get; } = [];
+    internal ConcurrentHashSet<SignalNode> Changed { get; } = [];
+    internal ConcurrentHashSet<SignalEffect> Effects { get; } = [];
 
     internal bool IsReadonly => _isReadonly || (_parent?.IsReadonly ?? false);
     internal bool CanAcceptForwarded => _recursive || (_parent?.CanAcceptForwarded ?? false);
 
-    private readonly ConcurrentHashSet<SignalNode> _touchedNodes = [];
-    private readonly ConcurrentHashSet<SignalNode> _changedNodes = [];
+    internal bool AcceptEffects => _collectEffects || (_parent?.AcceptEffects ?? false);
 
     private SignalTracker? _parent;
     private bool _isReadonly;
@@ -23,6 +22,7 @@ internal sealed partial class SignalTracker
 
     private bool _forwardEnabled = true;
     private bool _recursive;
+    private bool _collectEffects;
 
     internal SignalTracker Readonly(bool @readonly = true)
     {
@@ -60,11 +60,33 @@ internal sealed partial class SignalTracker
         return this;
     }
 
+    internal SignalTracker CollectEffects(bool collectEffects = true)
+    {
+        _collectEffects = collectEffects;
+    
+        return this;
+    }
+
     internal SignalTracker DisableForwarding(bool disabled = true)
     {
         _forwardEnabled = !disabled;
 
         return this;
+    }
+
+    internal void PostEffect(SignalEffect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+
+        if (_collectEffects)
+        {
+            this.Effects.Add(effect);
+        }
+
+        if (_parent?.AcceptEffects ?? false)
+        {
+            _parent?.PostEffect(effect);
+        }
     }
 
     internal void Track(SignalNode node)
@@ -73,7 +95,7 @@ internal sealed partial class SignalTracker
 
         if (_isTracking)
         {
-            _touchedNodes.Add(node);
+            this.Tracked.Add(node);
         }
 
         this.TrackForward(node);
@@ -85,7 +107,7 @@ internal sealed partial class SignalTracker
 
         if (_recursive && _isTracking)
         {
-            _touchedNodes.Add(node);
+            this.Tracked.Add(node);
         }
 
         if (!_forwardEnabled)
@@ -104,7 +126,7 @@ internal sealed partial class SignalTracker
             if (_isReadonly)
                 throw new SignalReadOnlyContextException();
 
-            _changedNodes.Add(node);
+            this.Changed.Add(node);
         }
 
         this.TrackForwardChanged(node);
@@ -116,7 +138,7 @@ internal sealed partial class SignalTracker
 
         if (_recursive && _isChangeTracking)
         {
-            _changedNodes.Add(node);
+            this.Changed.Add(node);
         }
 
         if (!_forwardEnabled)
@@ -128,8 +150,9 @@ internal sealed partial class SignalTracker
 
     private SignalTracker Reset()
     {
-        _touchedNodes.Clear();
-        _changedNodes.Clear();
+        this.Tracked.Clear();
+        this.Changed.Clear();
+        this.Effects.Clear();
 
         _parent = null;
 
@@ -138,6 +161,7 @@ internal sealed partial class SignalTracker
         _recursive = false;
         _isChangeTracking = false;
         _forwardEnabled = true;
+        _collectEffects = false;
 
         return this;
     }
