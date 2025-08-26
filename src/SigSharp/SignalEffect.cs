@@ -29,7 +29,7 @@ public class SignalEffect : TrackingSignalNode
     private readonly Lock _timerLock = new();
     private readonly Lock _scheduleLock = new();
     private SemaphoreSlim _runLock = new(1);
-    private ManualResetEventSlim _idle = new(true);
+    private AsyncManualResetEvent _idle = new(true);
     
     private SignalEffectFunctor _effectFunctor;
     private readonly ISignalEffectScheduler _effectScheduler;
@@ -212,11 +212,35 @@ public class SignalEffect : TrackingSignalNode
         }
     }
 
-    public void WaitIdle()
+    public bool WaitIdle(CancellationToken? stopToken = null)
     {
         this.CheckDisposed();
+
+        if (_idle.IsSet)
+            return false;
+
+        stopToken = stopToken.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(this.StopToken, stopToken.Value).Token
+            : this.StopToken;
         
-        _idle.Wait(this.StopToken);
+        _idle.Wait(stopToken.Value);
+        
+        return true;
+    }
+
+    public Task<bool> WaitIdleAsync(CancellationToken? stopToken = null)
+    {
+        this.CheckDisposed();
+
+        if (_idle.IsSet)
+            return Task.FromResult(false);
+
+        stopToken = stopToken.HasValue
+            ? CancellationTokenSource.CreateLinkedTokenSource(this.StopToken, stopToken.Value).Token
+            : this.StopToken;
+        
+        return _idle.WaitAsync(stopToken.Value)
+            .ContinueWith(static _ => true, TaskContinuationOptions.ExecuteSynchronously);
     }
     
     public Task AsTask()

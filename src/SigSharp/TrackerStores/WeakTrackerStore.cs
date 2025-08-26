@@ -66,6 +66,16 @@ public sealed class WeakTrackerStore : ITrackerStore
             action(state, node);
         }
     }
+    
+    public void Collect<TSignalNode>(ICollection<TSignalNode> target)
+        where TSignalNode : SignalNode
+    {
+        foreach (var (node, _) in _tracked)
+        {
+            if (node is TSignalNode signalNode)
+                target.Add(signalNode);
+        }
+    }
 
     private void CheckDisposed()
     {

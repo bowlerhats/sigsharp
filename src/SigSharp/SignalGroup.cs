@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.TrackerStores;
 using SigSharp.Utils;
@@ -77,6 +78,44 @@ public sealed partial class SignalGroup: SignalNode
         this.ResumeEffects(false);
     }
 
+    public async ValueTask<bool> WaitIdleAsync(TimeSpan? waitBetweenChecks = null, CancellationToken stopToken = default)
+    {
+        if (this.IsDisposed || this.IsSuspended || !_memberStore.HasAny)
+            return false;
+        
+        HashSet<SignalEffect> effects = [];
+        
+        var wasWorking = false;
+        bool isWorking;
+        do
+        {
+            isWorking = false;
+
+            _memberStore.Collect(effects);
+
+            if (!effects.Any())
+                break;
+            
+            foreach (var effect in effects)
+            {
+                if (effect.IsDisposed || effect.IsSuspended)
+                    continue;
+
+                if (await effect.WaitIdleAsync(stopToken))
+                {
+                    isWorking = true;
+                    wasWorking = true;
+                }
+            }
+
+            if (waitBetweenChecks.HasValue)
+                await Task.Delay(waitBetweenChecks.Value, stopToken);
+            
+        } while (isWorking);
+
+        return wasWorking;
+    }
+
     public bool TryQueueSuspended(SignalEffect effect)
     {
         if (!this.IsSuspended || _queued.Contains(effect))
@@ -99,6 +138,11 @@ public sealed partial class SignalGroup: SignalNode
         {
             CurrentBoundGroup.Value = _bindParent;
         }
+    }
+
+    public bool HasBound(SignalGroup group)
+    {
+        return _bindParent == group || (_bindParent?.HasBound(group) ?? false);
     }
 
     protected override void Dispose(bool disposing)

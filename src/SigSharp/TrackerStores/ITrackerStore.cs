@@ -18,4 +18,7 @@ public interface ITrackerStore : IDisposable
     
     void WithEach(Action<SignalNode> action);
     void WithEach<TState>(TState state, Action<TState, SignalNode> action);
+
+    void Collect<TSignalNode>(ICollection<TSignalNode> target)
+        where TSignalNode : SignalNode;
 }

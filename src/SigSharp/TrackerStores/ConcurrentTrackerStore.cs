@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -66,6 +67,16 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
         foreach (var node in _tracked)
         {
             action(state, node);
+        }
+    }
+
+    public void Collect<TSignalNode>(ICollection<TSignalNode> target)
+        where TSignalNode : SignalNode
+    {
+        foreach (var node in _tracked)
+        {
+            if (node is TSignalNode signalNode)
+                target.Add(signalNode);
         }
     }
 
