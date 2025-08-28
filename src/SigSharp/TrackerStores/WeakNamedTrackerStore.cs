@@ -52,11 +52,11 @@ internal sealed class WeakNamedTrackerStore : INamedTrackerStore
         _tracked.Clear();
     }
     
-    public void Track(SignalNode node, ComputedSignalId id)
+    public bool Track(SignalNode node, ComputedSignalId id)
     {
         this.CheckDisposed();
 
-        _tracked[id] = new WeakReference<SignalNode>(node);
+        return _tracked.TryAdd(id, new WeakReference<SignalNode>(node));
     }
     
     private void CheckDisposed()

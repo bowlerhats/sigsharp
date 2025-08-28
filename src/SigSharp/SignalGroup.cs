@@ -41,6 +41,7 @@ public sealed partial class SignalGroup: SignalNode
 
     private readonly INamedTrackerStore _namedStore;
     private readonly ITrackerStore _memberStore;
+    private readonly Lock _trackLock = new();
 
     private readonly ConcurrentQueue<SignalEffect> _queued = new();
     
@@ -178,14 +179,14 @@ public sealed partial class SignalGroup: SignalNode
         base.Dispose(disposing);
     }
 
-    public void AddMember(SignalNode node)
+    public bool AddMember(SignalNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         
         if (this.IsDisposed || node == this)
-            return;
+            return false;
         
-        _memberStore.Track(node);
+        return _memberStore.Track(node);
     }
 
     public void RemoveMember(SignalNode node)
@@ -214,7 +215,13 @@ public sealed partial class SignalGroup: SignalNode
         this.CheckDisposed();
         
         signal = new ComputedSignal<T>(this, functor, opts, name);
-        this.TrackComputed(signal, id);
+        
+        ComputedSignal<T> tracked = this.TrackComputed(signal, id);
+        if (tracked != signal)
+        {
+            signal.Dispose();
+            signal = tracked;
+        }
 
         return signal;
     }
@@ -236,7 +243,13 @@ public sealed partial class SignalGroup: SignalNode
         this.CheckDisposed();
         
         signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
-        this.TrackComputed(signal, id);
+        
+        ComputedSignal<T, TState> tracked = this.TrackComputed(signal, id);
+        if (tracked != signal)
+        {
+            signal.Dispose();
+            signal = tracked;
+        }
 
         return signal;
     }
@@ -266,8 +279,13 @@ public sealed partial class SignalGroup: SignalNode
             wrappedFunctor,
             opts,
             name);
-            
-        this.TrackComputed(signal, id);
+
+        WeakComputedSignal<T, TState> tracked = this.TrackComputed(signal, id);
+        if (tracked != signal)
+        {
+            signal.Dispose();
+            signal = tracked;
+        }
 
         return signal;
     }
@@ -278,11 +296,32 @@ public sealed partial class SignalGroup: SignalNode
         return _namedStore.LookupComputed<T>(id);
     }
 
-    private void TrackComputed(SignalNode node, ComputedSignalId id)
+    private TNode TrackComputed<TNode>(TNode node, ComputedSignalId id)
+        where TNode : SignalNode
     {
-        this.AddMember(node);
-        
-        _namedStore.Track(node, id);
+        lock (_trackLock)
+        {
+            var existing = this.LookupComputed<TNode>(id);
+
+            if (existing is not null)
+                return existing;
+
+            if (this.AddMember(node))
+            {
+                if (!_namedStore.Track(node, id))
+                {
+                    this.RemoveMember(node);
+                    
+                    throw new SignalException("Failed to track named computed signal node");
+                }
+            }
+            else
+            {
+                throw new SignalException("Failed to track computed signal node");
+            }
+        }
+
+        return node;
     }
 
     private void ResumeEffects(bool ignoreMembers)

@@ -13,5 +13,5 @@ internal interface INamedTrackerStore : IDisposable
     
     void Clear();
     
-    void Track(SignalNode node, ComputedSignalId id);
+    bool Track(SignalNode node, ComputedSignalId id);
 }

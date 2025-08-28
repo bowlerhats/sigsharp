@@ -41,11 +41,11 @@ internal sealed class ConcurrentNamedTrackerStore : INamedTrackerStore
         _tracked.Clear();
     }
     
-    public void Track(SignalNode node, ComputedSignalId id)
+    public bool Track(SignalNode node, ComputedSignalId id)
     {
         this.CheckDisposed();
 
-        _tracked[id] = node;
+        return _tracked.TryAdd(id, node);
     }
 
     private void CheckDisposed()

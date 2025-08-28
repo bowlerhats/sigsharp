@@ -8,7 +8,7 @@ public interface ITrackerStore : IDisposable
 {
     bool HasAny { get; }
 
-    void Track(SignalNode node);
+    bool Track(SignalNode node);
     
     void UnTrack(SignalNode node);
 

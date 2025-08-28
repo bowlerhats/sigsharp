@@ -37,11 +37,11 @@ public sealed class WeakTrackerStore : ITrackerStore
         return _tracked.TryGetValue(node, out _);
     }
 
-    public void Track(SignalNode node)
+    public bool Track(SignalNode node)
     {
         this.CheckDisposed();
         
-        _tracked.Add(node, SignalNode.EmptyObject);
+        return _tracked.TryAdd(node, SignalNode.EmptyObject);
     }
     
     public void UnTrack(SignalNode node)

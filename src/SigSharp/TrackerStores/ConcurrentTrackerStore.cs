@@ -34,11 +34,11 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
         return _tracked.Contains(node);
     }
 
-    public void Track(SignalNode node)
+    public bool Track(SignalNode node)
     {
         this.CheckDisposed();
         
-        _tracked.Add(node);
+        return _tracked.Add(node);
     }
     
     public void UnTrack(SignalNode node)
