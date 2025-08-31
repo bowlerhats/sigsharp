@@ -103,7 +103,6 @@ public class SignalEffect : TrackingSignalNode
             _effectFunctor = default;
             
             _idle.Dispose();
-            _idle = null!;
             
             _runLock.Dispose();
             _runLock = null!;
@@ -679,7 +678,10 @@ public class SignalEffect : TrackingSignalNode
             return;
         
         effect.CancelTimer();
-            
+
+        if (effect.IsDisposed)
+            return;
+        
         effect.Schedule(true);
     }
 }
