@@ -143,7 +143,9 @@ It should be rarely used, but useful in fire and forget scenarios.
 
 Contributions
 -------------
+This library is in alpha state. Despite the api surface being ready for release, many bug fixes and other major background chagnes might happen.
+So until the library is in an alpha state, limited contributions will be accepted to not waste dev time.
 
-While the library is in an alpha state limited contributions will be accepted.
-
-
+I kindly ask you to sign off the project's CLA, which provides legal ease-of-mind to You and fellow contributors.
+In addition to the DCO, we ask you to grant us (project owners) permission to change the license of the project to other open source license if need be in the future.
+For example we might want to change from the current Apache license to MIT or EPL in the future.
