@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace SigSharp.Nodes;
 
@@ -6,23 +7,20 @@ public abstract class ReactiveNode : SignalNode
 {
     public SignalGroup Group { get; }
 
-    protected ReactiveNode(SignalGroup group, bool isTrackable, string? name)
-        : base(isTrackable, name)
+    protected ReactiveNode(SignalGroup group, bool isTrackable, bool initiallyDirty, string? name)
+        : base(isTrackable, initiallyDirty, name)
     {
         ArgumentNullException.ThrowIfNull(group);
-        ObjectDisposedException.ThrowIf(group.IsDisposed, group);
+        SignalDisposedException.ThrowIf(group.IsDisposed, group);
 
         this.Group = group;
         group.AddMember(this);
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            this.Group.RemoveMember(this);
-        }
+        this.Group.RemoveMember(this);
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
     }
 }

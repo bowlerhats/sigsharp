@@ -4,6 +4,7 @@ public readonly struct SignalEffectResult
 {
     internal bool ShouldStop { get; init; }
     internal bool ShouldDestroy { get; init; }
+    internal bool ShouldReschedule { get; init; }
     
     public static SignalEffectResult Ok()
     {
@@ -18,5 +19,10 @@ public readonly struct SignalEffectResult
     public static SignalEffectResult Destroy()
     {
         return new SignalEffectResult { ShouldDestroy = true };
+    }
+
+    public static SignalEffectResult Reschedule()
+    {
+        return new SignalEffectResult { ShouldReschedule = true };
     }
 }

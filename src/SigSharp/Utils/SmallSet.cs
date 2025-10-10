@@ -18,15 +18,13 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
     public int Count { get; private set; }
 
     public bool IsEmpty => this.Count <= 0;
+    
+    public bool HasCapacity => this.Count < _slots.Length;
 
     private readonly Slot[] _slots;
-
     private readonly IEqualityComparer<T> _comparer;
+    private readonly Lock _lock = new();
     
-    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
-    
-    private bool HasCapacity => this.Count <= _slots.Length;
-
     private long _version;
     private long _clearCount;
     
@@ -83,19 +81,17 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
     
     void ICollection<T>.Add(T item)
     {
-        if (!this.Add(item))
+        if (!this.Add(item) && !this.HasCapacity)
             throw new IndexOutOfRangeException("Collection is full");
     }
 
     public bool Add(T item)
     {
-        _lock.EnterWriteLock();
-        try
+        lock (_lock)
         {
             if (!this.HasCapacity)
                 return false;
-            
-            var occupied = 0;
+
             var freeIndex = -1;
             for (var i = 0; i < _slots.Length; i++)
             {
@@ -103,17 +99,13 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
 
                 if (slot.IsOccupied)
                 {
-                    occupied++;
                     if (_comparer.Equals(slot.Item, item))
-                        return true;
+                        return false;
                 }
                 else if (freeIndex < 0)
                 {
                     freeIndex = i;
                 }
-                
-                if (freeIndex >= 0 && occupied >= this.Count)
-                    break;
             }
 
             if (freeIndex >= 0)
@@ -121,15 +113,11 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
                 _slots[freeIndex].IsOccupied = true;
                 _slots[freeIndex].Item = item;
                 _slots[freeIndex].Version = ++_version;
-                
+
                 this.Count++;
 
                 return true;
             }
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
         }
 
         return false;
@@ -137,12 +125,11 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
 
     public void Clear()
     {
-        _lock.EnterWriteLock();
-        try
+        lock (_lock)
         {
             if (this.IsEmpty)
                 return;
-            
+
             for (var i = 0; i < _slots.Length; i++)
             {
                 _slots[i].Reset();
@@ -152,38 +139,22 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
             _version = 0;
             _clearCount++;
         }
-        finally
-        {
-            _lock.ExitWriteLock();
-        }
     }
 
     public bool Contains(T item)
     {
-        _lock.EnterReadLock();
-        try
+        if (this.IsEmpty)
+            return false;
+        
+        for (var i = 0; i < _slots.Length; i++)
         {
-            if (this.IsEmpty)
-                return false;
+            if (!_slots[i].IsOccupied)
+                continue;
             
-            var occupied = 0;
-            for (var i = 0; i < _slots.Length; i++)
-            {
-                var slot = _slots[i];
-
-                if (!slot.IsOccupied)
-                    continue;
-                
-                if (slot.Item is not null && _comparer.Equals(item, slot.Item))
-                    return true;
-                    
-                if (++occupied >= this.Count)
-                    break;
-            }
-        }
-        finally
-        {
-            _lock.ExitReadLock();
+            var slot = _slots[i];
+            
+            if (slot.Item is not null && _comparer.Equals(item, slot.Item))
+                return true;
         }
 
         return false;
@@ -191,12 +162,11 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
 
     public void CopyTo(T[] array, int arrayIndex)
     {
-        _lock.EnterReadLock();
-        try
+        lock (_lock)
         {
             if (this.IsEmpty)
                 return;
-            
+
             var occupied = 0;
             for (var i = 0; i < _slots.Length; i++)
             {
@@ -214,22 +184,17 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
                     break;
             }
         }
-        finally
-        {
-            _lock.ExitReadLock();
-        }
     }
     
     public bool Remove(T item)
     {
         var wasRemoved = false;
-        
-        _lock.EnterWriteLock();
-        try
+
+        lock (_lock)
         {
             if (this.IsEmpty)
                 return false;
-            
+
             var occupied = 0;
             for (var i = 0; i < _slots.Length; i++)
             {
@@ -243,17 +208,13 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
                     _slots[i].Reset();
                     this.Count--;
                     occupied--;
-                    
+
                     wasRemoved = true;
                 }
 
                 if (++occupied >= this.Count)
                     break;
             }
-        }
-        finally
-        {
-            _lock.ExitWriteLock();
         }
 
         return wasRemoved;
@@ -299,20 +260,12 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
 
         public bool MoveNext()
         {
-            return this.MoveNext(true);
-        }
-
-        private bool MoveNext(bool locked)
-        {
             if (_endReached)
                 return false;
             
             var fromStart = _pos == -1;
             
-            if (locked)
-                _set._lock.EnterReadLock();
-            
-            try
+            lock (_set._lock)
             {
                 if (_clear != _set._clearCount)
                 {
@@ -339,21 +292,15 @@ internal sealed class SmallSet<T> : ICollection<T>, IReadOnlyCollection<T>
                     _toVersion = _set._version;
                     _pos = -1;
 
-                    if (this.MoveNext(false))
+                    if (this.MoveNext())
                         return true;
                 }
             
                 _endReached = true;
             }
-            finally
-            {
-                if (locked)
-                    _set._lock.ExitReadLock();
-            }
-
+            
             return false;
         }
-        
 
         public void Reset()
         {

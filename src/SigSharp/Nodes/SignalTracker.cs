@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
@@ -8,21 +11,40 @@ internal sealed partial class SignalTracker
     internal ConcurrentHashSet<SignalNode> Tracked { get; } = [];
     internal ConcurrentHashSet<SignalNode> Changed { get; } = [];
     internal ConcurrentHashSet<SignalEffect> Effects { get; } = [];
-
+    internal ConcurrentHashSet<SignalNode> Locked { get; } = [];
+    internal ConcurrentHashSet<SignalNode> Waited { get; } = [];
+    internal ConcurrentHashSet<SignalNode> Latched { get; } = [];
+    internal ConcurrentHashSet<SignalTracker> Children { get; } = [];
+    
+    internal Dictionary<SignalNode, uint> Versions { get; } = [];
+    private SpinLock _versionsLock = new(false); 
+    
     internal bool IsReadonly => _isReadonly || (_parent?.IsReadonly ?? false);
-    internal bool CanAcceptForwarded => _recursive || (_parent?.CanAcceptForwarded ?? false);
 
     internal bool AcceptEffects => _collectEffects || (_parent?.AcceptEffects ?? false);
 
+    internal bool IsTracking => _isTracking;
+
+    internal SignalTracker? Parent => _parent;
+
+    internal SignalTracker Root => _parent?.Root ?? this;
+    
+    internal bool IsRoot => this.Root == this;
+    
+    private static long _trackerIdCount = 1;
+    private long _trackerId = 1;
+    
     private SignalTracker? _parent;
     private bool _isReadonly;
 
     private bool _isTracking = true;
     private bool _isChangeTracking;
+    private bool _breaksTracking;
 
-    private bool _forwardEnabled = true;
     private bool _recursive;
     private bool _collectEffects;
+
+    private SignalNode? _contextNode;
 
     internal SignalTracker Readonly(bool @readonly = true)
     {
@@ -42,6 +64,13 @@ internal sealed partial class SignalTracker
     internal SignalTracker EnableTracking(bool enabled = true)
     {
         _isTracking = enabled;
+
+        return this;
+    }
+
+    internal SignalTracker BreaksTracking(bool breaksTracking = true)
+    {
+        _breaksTracking = breaksTracking;
 
         return this;
     }
@@ -67,13 +96,6 @@ internal sealed partial class SignalTracker
         return this;
     }
 
-    internal SignalTracker DisableForwarding(bool disabled = true)
-    {
-        _forwardEnabled = !disabled;
-
-        return this;
-    }
-
     internal void PostEffect(SignalEffect effect)
     {
         ArgumentNullException.ThrowIfNull(effect);
@@ -92,86 +114,539 @@ internal sealed partial class SignalTracker
     internal void Track(SignalNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-
-        if (_isTracking)
+        
+        foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
         {
-            this.Tracked.Add(node);
-        }
+            if (tracker._breaksTracking)
+                break;
+            
+            if (!tracker._isTracking)
+                continue;
 
-        this.TrackForward(node);
+            if (tracker._recursive || tracker == this)
+            {
+                tracker.Tracked.Add(node);
+            }
+        }
     }
 
-    internal void TrackForward(SignalNode node)
+    internal HashSet<SignalNode> GatherLocked(HashSet<SignalNode>? collector = null)
     {
-        ArgumentNullException.ThrowIfNull(node);
-
-        if (_recursive && _isTracking)
+        collector ??= new HashSet<SignalNode>(16);
+        
+        foreach (var tracker in ObjectWalker.Walk(this, static d => d.Parent))
         {
-            this.Tracked.Add(node);
+            foreach (var signalNode in tracker.Locked)
+            {
+                collector.Add(signalNode);
+            }
         }
 
-        if (!_forwardEnabled)
+        foreach (var child in this.Children)
+        {
+            child.GatherLocked(collector);
+        }
+
+        return collector;
+    }
+
+    internal HashSet<SignalNode> GatherWaited(HashSet<SignalNode>? collector = null)
+    {
+        collector ??= new HashSet<SignalNode>(16);
+        
+        foreach (var tracker in ObjectWalker.Walk(this, static d => d.Parent))
+        {
+            foreach (var signalNode in tracker.Waited)
+            {
+                collector.Add(signalNode);
+            }
+        }
+
+        foreach (var child in this.Children)
+        {
+            child.GatherWaited(collector);
+        }
+
+        return collector;
+    }
+
+    public void RequestAccess(SignalNode node)
+    {
+        if (node.AccessStrategy == SignalAccessStrategy.Unrestricted)
+            return;
+        
+        if (this.HoldsLock(node, true))
+            return;
+        
+        switch (node.AccessStrategy)
+        {
+            case SignalAccessStrategy.Unrestricted:
+                return;
+            
+            case SignalAccessStrategy.ExclusiveLock:
+                
+                this.ExclusiveLock(node);
+                break;
+            
+            case SignalAccessStrategy.PreemptiveLock:
+                
+                this.PreEmptiveAccess(node);
+                break;
+            default:                                   throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    public void RequestUpdate(SignalNode node)
+    {
+        if (node.AccessStrategy == SignalAccessStrategy.Unrestricted)
+            return;
+        
+        if (this.HoldsLock(node, true))
+            return;
+        
+        switch (node.AccessStrategy)
+        {
+            case SignalAccessStrategy.Unrestricted:
+                return;
+            
+            case SignalAccessStrategy.ExclusiveLock:
+                
+                this.ExclusiveLock(node);
+                break;
+            
+            case SignalAccessStrategy.PreemptiveLock:
+
+                this.PreEmptiveUpdate(node);
+                break;
+            default:                                   throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private void RegisterLock(SignalNode node)
+    {
+        foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
+        {
+            tracker.Locked.Add(node);
+            node.LockedBy.Add(tracker);
+        }
+    }
+
+    private void ExclusiveLock(SignalNode node)
+    {
+        var accessLock = node.AccessLock;
+        if (accessLock is null)
+            return;
+        
+        Debugger.NotifyOfCrossThreadDependency();
+        
+        using var activity = node.StartActivity();
+
+        lock (node.RequestLock)
+        {
+            if (this.HoldsLock(node, true))
+                return;
+            
+            if (accessLock.CurrentCount > 0)
+            {
+                if (accessLock.Wait(TimeSpan.FromMilliseconds(10)))
+                {
+                    this.RegisterLock(node);
+
+                    return;
+                }
+            }
+
+            if (node.IsDisposing)
+                return;
+        }
+
+        if (!this.WaitAccess(node, TimeSpan.FromSeconds(1)))
+            return;
+        
+        this.RegisterLock(node);
+    }
+
+    private bool WaitAccess(SignalNode node, TimeSpan timeout)
+    {
+        var accessLock = node.AccessLock;
+
+        if (accessLock is null)
+            return false;
+
+        try
+        {
+            node.Waiters.Add(this);
+            this.Waited.Add(node);
+            
+            while (!accessLock.Wait(timeout))
+            {
+                node.Event("AccessLockTimeout");
+                
+                if (node.IsDisposing)
+                    return false;
+                
+                if (this.HoldsLock(node, true))
+                    return true;
+
+                if (node.LockedBy.HasAny)
+                {
+                    if (this.IsDeadlocked(node))
+                    {
+                        throw new SignalDeadlockedException(node);
+                    }
+                }
+            }
+
+            return !node.IsDisposing;
+        }
+        finally
+        {
+            node.Waiters.Remove(this);
+            this.Waited.Remove(node);
+        }
+    }
+
+    internal bool IsInEffect()
+    {
+        foreach (var tracker in ObjectWalker.Walk(this, static d => d._parent))
+        {
+            if (tracker._contextNode is SignalEffect)
+                return true;
+        }
+
+        return false;
+    }
+
+    internal bool IsDeadlocked(SignalNode checkNode)
+    {
+        HashSet<SignalNode> visitedNodes = [];
+        Queue<SignalNode> lockedNodes = [];
+        
+        this.GatherLocked().ForEach(lockedNodes.Enqueue);
+
+        while (lockedNodes.TryDequeue(out var lockedNode))
+        {
+            if (!visitedNodes.Add(lockedNode))
+                continue;
+            
+            foreach (var waiterTrack in lockedNode.Waiters)
+            {
+                if (waiterTrack.HoldsLock(checkNode, true))
+                    return true;
+                
+                var sublock = waiterTrack.GatherLocked();
+                sublock.ForEach(lockedNodes.Enqueue);
+            }
+        }
+
+        return false;
+    }
+
+    private void PreEmptiveAccess(SignalNode node)
+    {
+        var accessLatch = node.AccessLatch;
+        if (accessLatch is null)
+            return;
+        
+        if (this.HasLatched(node))
+        {
+            this.YieldWhenYoungerThan(node);
+            
+            this.CheckVersion(node);
+            
+            return;
+        }
+
+        if (!accessLatch.Acquire(this.Root, TimeSpan.FromMilliseconds(10)))
+        {
+            if (node.IsDisposing)
+                return;
+
+            try
+            {
+                node.Waiters.Add(this);
+                this.Waited.Add(node);
+
+                while (!accessLatch.Acquire(this.Root, TimeSpan.FromSeconds(1)))
+                {
+                    if (node.IsDisposing)
+                        return;
+
+                    if (this.HoldsLock(node, true))
+                        return;
+                    
+                    this.YieldWhenYoungerThan(node);
+
+                    if (this.IsDeadlocked(node))
+                    {
+                        throw new SignalDeadlockedException(node);
+                    }
+                }
+            }
+            finally
+            {
+                node.Waiters.Remove(this);
+                this.Waited.Remove(node);
+            }
+        }
+
+        this.Root.Latched.Add(node);
+
+        this.CheckVersion(node);
+    }
+
+    private void YieldWhenYoungerThan(SignalNode node)
+    {
+        if (node.LockedBy.IsEmpty)
             return;
 
-        if (_parent?.CanAcceptForwarded ?? false)
-            _parent.TrackForward(node);
+        SignalTracker? minLocker = null;
+
+        foreach (var lockingTracker in node.LockedBy)
+        {
+            minLocker ??= lockingTracker;
+            
+            foreach (var lTracker in ObjectWalker.Walk(lockingTracker, static d => d.Parent))
+            {
+                if (!lTracker.AcceptEffects)
+                    continue;
+
+                if (lTracker._trackerId < minLocker._trackerId)
+                    minLocker = lTracker;
+            }
+        }
+
+        if (minLocker is { AcceptEffects: true } && minLocker._trackerId < _trackerId)
+        {
+            if (this.Root._contextNode is SignalEffect myRootEffect)
+                minLocker.PostEffect(myRootEffect);
+            
+            throw new SignalPreemptedException(node);
+        }
+    }
+
+    private void CheckVersion(SignalNode node)
+    {
+        var lockTaken = false;
+        try
+        {
+            _versionsLock.Enter(ref lockTaken);
+
+            if (!this.Versions.TryGetValue(node, out var version))
+            {
+                version = node.Version;
+                this.Versions.Add(node, version);
+            }
+            
+            if (version != node.Version)
+            {
+                throw new SignalUnexpectedlyChangedException(version, node.Version);
+            }
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _versionsLock.Exit(false);
+            }
+        }
+    }
+
+    private void PreEmptiveUpdate(SignalNode node)
+    {
+        var accessLatch = node.AccessLatch;
+        if (accessLatch is null)
+            return;
+
+        this.YieldWhenYoungerThan(node);
+
+        lock (node.RequestLock)
+        {
+            if (accessLatch.IsGateClosed)
+                throw new SignalPreemptedException(node);
+            
+            accessLatch.CloseGate();
+        }
+
+        var wasLatching = accessLatch.HasLatch(this.Root);
+        if (wasLatching)
+            accessLatch.Release(this.Root);
+
+        if (!accessLatch.Wait(TimeSpan.FromMilliseconds(20)))
+        {
+            this.YieldWhenYoungerThan(node);
+                
+            try
+            {
+                node.Waiters.Add(this);
+                this.Waited.Add(node);
+
+                while (!accessLatch.Wait(TimeSpan.FromMilliseconds(300)))
+                {
+                    if (node.IsDisposing || this.HoldsLock(node, true))
+                    {
+                        return;
+                    }
+                        
+                    this.YieldWhenYoungerThan(node);
+
+                    if (this.IsDeadlocked(node))
+                    {
+                        throw new SignalDeadlockedException(node);
+                    }
+                }
+            }
+            finally
+            {
+                node.Waiters.Remove(this);
+                this.Waited.Remove(node);
+            }
+        }
+
+        this.RegisterLock(node);
+    }
+
+    private bool HasLatched(SignalNode node)
+    {
+        return this.Root.Latched.Contains(node);
+    }
+
+    internal bool HoldsLock(SignalNode node, bool recursive = false)
+    {
+        if (!recursive)
+            return this.Locked.Contains(node);
+
+        foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
+        {
+            if (tracker.Locked.Contains(node))
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool HasTracked(SignalNode node, bool recursive = false)
+    {
+        if (!recursive)
+            return this.Tracked.Contains(node);
+
+        foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
+        {
+            if (tracker.Tracked.Contains(node))
+                return true;
+        }
+
+        return false;
     }
 
     internal void TrackChanged(SignalNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-
+        
         if (_isChangeTracking)
         {
-            if (_isReadonly)
-                throw new SignalReadOnlyContextException();
-
             this.Changed.Add(node);
         }
-
-        this.TrackForwardChanged(node);
-    }
-
-    internal void TrackForwardChanged(SignalNode node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-
-        if (_recursive && _isChangeTracking)
-        {
-            this.Changed.Add(node);
-        }
-
-        if (!_forwardEnabled)
+        
+        if (_parent is null)
             return;
-
-        if (_parent?.CanAcceptForwarded ?? false)
-            _parent.TrackForwardChanged(node);
+        
+        foreach (var tracker in ObjectWalker.Walk(_parent, static tracker => tracker._parent))
+        {
+            if (tracker is { _isChangeTracking: true, _recursive: true })
+            {
+                tracker.Changed.Add(node);
+            }
+        }
     }
 
     private SignalTracker Reset()
     {
+        this.ReleaseLocks();
+
+        _parent?.Children.Remove(this);
+        this.Children.Clear();
+        
         this.Tracked.Clear();
         this.Changed.Clear();
         this.Effects.Clear();
-
+        this.Versions.Clear();
+        this.Waited.Clear();
+        this.Latched.Clear();
+        
         _parent = null;
 
         _isReadonly = false;
         _isTracking = true;
         _recursive = false;
         _isChangeTracking = false;
-        _forwardEnabled = true;
         _collectEffects = false;
-
+        _breaksTracking = false;
+        
         return this;
     }
 
-    private SignalTracker Init(SignalTracker? parent)
+    private SignalTracker Init(SignalNode? contextNode, SignalTracker? parent)
     {
         this.Reset();
 
+        _trackerId = Interlocked.Increment(ref _trackerIdCount);
+        
+        _contextNode = contextNode;
+        
         _parent = parent;
-
+        parent?.Children.Add(this);
+        
         return this;
+    }
+
+    private void ReleaseLocks()
+    {
+        foreach (var node in this.Locked)
+        {
+            this.Locked.Remove(node);
+            node.LockedBy.Remove(this);
+
+            try
+            {
+                if (this.IsRoot)
+                {
+                    switch (node.AccessStrategy)
+                    {
+                        case SignalAccessStrategy.Unrestricted: break;
+                        case SignalAccessStrategy.ExclusiveLock:
+                            node.AccessLock?.Release();
+                            break;
+                        case SignalAccessStrategy.PreemptiveLock:
+                            node.AccessLatch?.ReleaseGate();
+                            break;
+                        default: throw new ArgumentOutOfRangeException();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+        }
+        
+        this.Locked.Clear();
+        
+        if (this.IsRoot)
+        {
+            foreach (var node in this.Latched)
+            {
+                node.AccessLatch?.Release(this);
+            }
+            
+            this.Latched.Clear();
+        }
+    }
+
+    public override string ToString()
+    {
+        return _contextNode is null
+            ? "Tracker:Anonymous"
+            : $"Tracker:{_contextNode.GetType().Name}:{_contextNode}";
     }
 }

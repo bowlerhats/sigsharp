@@ -10,33 +10,69 @@ internal sealed class AsyncManualResetEvent : IDisposable
 
     public bool IsSet => _tcs.Task.IsCompleted;
 
+    private bool _disposed;
+
     public AsyncManualResetEvent(bool isSetInitially)
     {
         if (isSetInitially)
             this.Set();
     }
 
-    public Task WaitAsync(CancellationToken? stopToken = null)
+    public Task<bool> WaitAsync(TimeSpan? timeout = null, CancellationToken? stopToken = null)
     {
-        return stopToken.HasValue
-            ? _tcs.Task.WaitAsync(stopToken.Value)
-            : _tcs.Task;
+        TaskCompletionSource<bool> tcs = _tcs;
+        
+        if (_disposed || tcs.Task.IsCompleted)
+            return Task.FromResult(true);
+
+        if (timeout.HasValue)
+        {
+            return Task.WhenAny(
+                    tcs.Task.ContinueWith(static _ => true, TaskContinuationOptions.ExecuteSynchronously),
+                    Task.Delay(timeout.Value).ContinueWith(static _ => false, TaskContinuationOptions.ExecuteSynchronously)
+                    )
+                .ContinueWith(t => t.Result.Result, TaskContinuationOptions.ExecuteSynchronously);
+        }
+
+        if (!stopToken.HasValue)
+            return tcs.Task;
+
+        return tcs.Task.WaitAsync(stopToken.Value);
     }
 
-    public void Wait(CancellationToken stopToken = default)
+    public bool Wait(TimeSpan? timeout = null, CancellationToken stopToken = default)
     {
+        if (_disposed)
+            return true;
+
+        if (timeout.HasValue)
+        {
+            return this.WaitAsync(timeout, stopToken).GetAwaiter().GetResult();
+        }
+        
         _tcs.Task.Wait(stopToken);
+
+        return true;
     }
     
     public void Set()
     {
-        _tcs.TrySetResult(true);
+        if (!_tcs.TrySetResult(true) && !_tcs.Task.IsCompleted)
+        {
+            _tcs.SetResult(true);
+        }
     }
 
     public void Reset()
     {
+        if (_disposed)
+            return;
+        
         while (true)
         {
+            if (_disposed)
+                return;
+            
             TaskCompletionSource<bool> tcs = _tcs;
 
             if (!tcs.Task.IsCompleted)
@@ -49,7 +85,15 @@ internal sealed class AsyncManualResetEvent : IDisposable
 
     public void Dispose()
     {
-        if (!_tcs.Task.IsCompleted)
-            _tcs.TrySetCanceled();
+        var wasDisposed = Interlocked.CompareExchange(ref _disposed, true, false); 
+        if (!wasDisposed && _disposed)
+        {
+            var dts = new TaskCompletionSource<bool>();
+            dts.SetResult(true);
+
+            var tcs = Interlocked.Exchange(ref _tcs, dts);
+            if (!tcs.Task.IsCompleted)
+                tcs.TrySetResult(true);
+        }
     }
 }

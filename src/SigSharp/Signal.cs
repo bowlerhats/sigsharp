@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -16,11 +18,13 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
 
     public T Untracked => this.GetUntracked();
 
-    public bool IsDefault => _comparer.Equals(this.Get(), default);
+    public bool IsDefault => _comparer.Equals(this.Get(), this.DefaultValue);
     public bool IsNull => this.Get() is null;
 
     public bool IsDefaultUntracked => Signals.Untracked(() => this.IsDefault);
     public bool IsNullUntracked => Signals.Untracked(() => this.IsNull);
+
+    public T DefaultValue => default!;
     
     public SignalOptions Options { get; }
 
@@ -30,35 +34,45 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     private SignalObservable<T>? _observable;
     private DisposedSignalAccess.DisposedCapture<T> _disposedCapture;
 
-    public Signal(T initialValue, SignalOptions? opts = null, string? name = null)
-        : base(true, name)
+    private Signal(bool isInitialSet, T initialValue, SignalOptions? opts = null, string? name = null)
+        : base(true, false, name ?? $"Signal<{typeof(T).Name}>")
     {
-        _value = initialValue;
+        _value = isInitialSet ? initialValue : default!;
         
         this.Options = opts ?? SignalOptions.Defaults;
+
+        this.SetAccessStrategy(this.Options.AccessStrategy);
         
         _comparer = AsGenericComparer<T>(this.Options.EqualityComparer);
+        
+        if (!isInitialSet)
+            _value = this.DefaultValue;
     }
     
-    public Signal(SignalOptions? opts = null)
-        : this(default!, opts)
+    public Signal(T initialValue, SignalOptions? opts = null, string? name = null)
+        : this(true, initialValue, opts, name)
+    {
+    }
+    
+    public Signal(SignalOptions? opts = null, string? name = null)
+        : this(false, default!, opts, name)
     {
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _observable?.Dispose();
-            _observable = null;
+        _observable?.Dispose();
+        _observable = null;
 
-            _disposedCapture = DisposedSignalAccess.Capture(_value, this, this.Options.DisposedAccessStrategy);
+        _disposedCapture = DisposedSignalAccess.Capture(_value, this.DefaultValue, this, this.Options.DisposedAccessStrategy);
             
-            _value = default!;
-        }
-
-        base.Dispose(disposing);
+        _value = default!;
+        
+        return base.DisposeAsyncCore();
     }
+    
+    public override void MarkDirty() { }
+    public override void MarkPristine() { }
 
     public T GetUntracked()
     {
@@ -71,13 +85,14 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
             return DisposedSignalAccess.Access(_disposedCapture, this);
         
         this.MarkTracked();
-
+        this.RequestAccess();
+        
         return _value;
     }
 
     public void SetDefault()
     {
-        this.Set(default!);
+        this.Set(this.DefaultValue);
     }
     
     public void Set(T value)
@@ -89,9 +104,12 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
 
         if (SignalTracker.IsReadonlyContext)
         {
-            throw new SignalException("Attempted to set signal in read-only context");
+            throw new SignalReadOnlyContextException();
         }
         
+        this.RequestUpdate();
+        this.CheckDisposed();
+       
         _value = value;
         
         this.Changed();
@@ -104,17 +122,25 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         this.CheckDisposed();
         
         this.MarkTracked();
+        this.RequestAccess();
         
-        _observable ??= new SignalObservable<T>(_value);
-
-        return _observable;
+        this.CheckDisposed();
+        
+        IObservable<T>? res = _observable;
+        if (res is null)
+        {
+            Interlocked.CompareExchange(ref _observable, new SignalObservable<T>(_value), null);
+            res = Volatile.Read(ref _observable);
+        }
+        
+        return res;
     }
-    
+
     public override string ToString()
     {
         if (this.IsDisposed)
             return "disposed";
         
-        return _value?.ToString() ?? "null";
+        return $"id: {this.NodeId} | {_value?.ToString() ?? "null"}";
     }
 }

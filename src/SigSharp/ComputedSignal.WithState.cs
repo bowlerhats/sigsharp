@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using SigSharp.Utils;
 
 namespace SigSharp;
 
-public class ComputedSignal<T, TState> : ComputedSignal<T>
+public class ComputedSignal<[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+    )]T, TState> : ComputedSignal<T>
 {
     protected override bool IsAsyncFunctor => _stateFunctor.IsValueTask;
     
@@ -26,15 +29,12 @@ public class ComputedSignal<T, TState> : ComputedSignal<T>
         _state = state;
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _state = default;
-            _stateFunctor = default;
-        }
+        _state = default;
+        _stateFunctor = default;
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
     }
 
     protected override T CalcValueSyncOnly()

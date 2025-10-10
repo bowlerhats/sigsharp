@@ -13,7 +13,7 @@ public static class DisposedSignalAccess
     public enum Strategy
     {
         /// <summary>
-        /// Throws ObjectDisposed exception when attempting to Get() the value.
+        /// Throws SignalDisposedException exception when attempting to Get() the value.
         /// </summary>
         Throw,
     
@@ -46,27 +46,45 @@ public static class DisposedSignalAccess
         /// Uses 'default(T) is null' check instead of reflection to determine nullability.<br/>
         /// This means that it will throw for boxed values like Nullable&lt;T&gt; 
         /// </remarks>
-        LastScalar
+        LastScalar,
+        
+        /// <summary>
+        /// Returns the last observed value for scalar types (value types), or default if T is nullable
+        /// </summary>
+        /// <remarks>
+        /// Uses 'default(T) is null' check instead of reflection to determine nullability.<br/>
+        /// </remarks>
+        LastScalarOrDefault
     }
-    
-    public record struct DisposedCapture<T>(T Value, Strategy Strategy = Strategy.Throw, bool? IsNullable = null);
+
+    public record struct DisposedCapture<T>(
+        T Value,
+        T DefaultValue,
+        Strategy Strategy = Strategy.Throw,
+        bool? IsNullable = null
+        );
 
     public static DisposedCapture<T> Capture<T>(
         T currentValue,
+        T defaultValue,
         SignalNode node,
         Strategy strategy,
         bool? isNullable = null)
     {
         return strategy switch
         {
-            Strategy.LastValue => new DisposedCapture<T>(currentValue, strategy),
+            Strategy.LastValue => new DisposedCapture<T>(currentValue, default!, strategy),
             Strategy.LastScalar
                 => isNullable ?? TypeUtils.IsNullableByDefault<T>()
-                    ? new DisposedCapture<T>(default!, strategy, true)
-                    : new DisposedCapture<T>(currentValue, strategy, false),
+                    ? new DisposedCapture<T>(default!, default!, strategy, true)
+                    : new DisposedCapture<T>(currentValue, default!, strategy, false),
+            Strategy.LastScalarOrDefault
+                => isNullable ?? TypeUtils.IsNullableByDefault<T>()
+                    ? new DisposedCapture<T>(default!, defaultValue!, strategy, true)
+                    : new DisposedCapture<T>(currentValue, default!, strategy, false),
             Strategy.DefaultScalar
-                => new DisposedCapture<T>(default!, strategy, isNullable ?? TypeUtils.IsNullableByDefault<T>()),
-            _ => new DisposedCapture<T>(default!, strategy)
+                => new DisposedCapture<T>(default!, defaultValue, strategy, isNullable ?? TypeUtils.IsNullableByDefault<T>()),
+            _ => new DisposedCapture<T>(default!, defaultValue, strategy)
         };
     }
 
@@ -75,19 +93,19 @@ public static class DisposedSignalAccess
         switch (capture.Strategy)
         {
             case Strategy.Throw:
-                ObjectDisposedException.ThrowIf(node.IsDisposed, node);
+                SignalDisposedException.ThrowIf(node.IsDisposed, node);
                 break;
             
             case Strategy.DefaultValue:
-                return default!;
+                return capture.DefaultValue;
             
             case Strategy.DefaultScalar:
                 if (capture.IsNullable is null or true)
                 {
-                    ObjectDisposedException.ThrowIf(node.IsDisposed, node);
+                    SignalDisposedException.ThrowIf(node.IsDisposed, node);
                 }
 
-                return default!;
+                return capture.DefaultValue;
             
             case Strategy.LastValue:
                 return capture.Value;
@@ -95,10 +113,16 @@ public static class DisposedSignalAccess
             case Strategy.LastScalar:
                 if (capture.IsNullable is null or true)
                 {
-                    ObjectDisposedException.ThrowIf(node.IsDisposed, node);
+                    SignalDisposedException.ThrowIf(node.IsDisposed, node);
                 }
 
                 return capture.Value;
+            
+            case Strategy.LastScalarOrDefault:
+                return capture.IsNullable is null or true
+                    ? capture.DefaultValue
+                    : capture.Value;
+            
             default:
                 throw new ArgumentOutOfRangeException(nameof(capture), "Unknown signal dispose access strategy");
         }

@@ -11,25 +11,45 @@ public class DictionarySignal<TKey, TValue>
 {
     public TValue this[TKey key]
     {
-        get => this.BackingCollection[key];
-        set => this.BackingCollection[key] = value;
+        get { this.MarkTracked(); this.RequestAccess(); return this.BackingCollection[key]; }
+        set {
+            this.RequestUpdate();
+            
+            if (this.BackingCollection.TryUpdate(key, value, value)
+                || this.BackingCollection.TryAdd(key, value))
+            {
+                this.Changed();
+            }
+        }
     }
 
-    public ICollection<TKey> Keys => this.BackingCollection.Keys;
+    public ICollection<TKey> Keys
+    {
+        get { this.MarkTracked(); this.RequestAccess(); return this.BackingCollection.Keys; }
+    }
 
-    public ICollection<TValue> Values => this.BackingCollection.Values;
-    
-    IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys => this.BackingCollection.Keys;
+    public ICollection<TValue> Values
+    {
+        get { this.MarkTracked(); this.RequestAccess(); return this.BackingCollection.Values; }
+    }
 
-    IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values => this.BackingCollection.Values;
+    IEnumerable<TKey> IReadOnlyDictionary<TKey, TValue>.Keys
+    {
+        get { this.MarkTracked(); this.RequestAccess(); return this.BackingCollection.Keys; }
+    }
 
-    public DictionarySignal(IEnumerable<KeyValuePair<TKey, TValue>> initialValues, CollectionSignalOptions? opts = null)
-        : base(initialValues, opts)
+    IEnumerable<TValue> IReadOnlyDictionary<TKey, TValue>.Values
+    {
+        get { this.MarkTracked(); this.RequestAccess(); return this.BackingCollection.Values; }
+    }
+
+    public DictionarySignal(IEnumerable<KeyValuePair<TKey, TValue>> initialValues, CollectionSignalOptions? opts = null, string? name = null)
+        : base(initialValues, opts, name ?? $"DictionarySignal<{typeof(TKey).Name}, {typeof(TValue).Name}>")
     {
     }
 
-    public DictionarySignal(CollectionSignalOptions? opts = null)
-        : this([], opts)
+    public DictionarySignal(CollectionSignalOptions? opts = null, string? name = null)
+        : this([], opts, name)
     {
     }
 
@@ -41,17 +61,20 @@ public class DictionarySignal<TKey, TValue>
     
     public void Add(TKey key, TValue value)
     {
+        this.RequestUpdate();
+        
         if (!this.BackingCollection.TryAdd(key, value))
         {
             this.BackingCollection[key] = value;
+            
+            this.Changed();
         }
-        
-        this.Changed();
     }
     
     public bool ContainsKey(TKey key)
     {
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.BackingCollection.ContainsKey(key);
     }
@@ -59,12 +82,15 @@ public class DictionarySignal<TKey, TValue>
     public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.BackingCollection.TryGetValue(key, out value);
     }
 
     public bool Remove(TKey key)
     {
+        this.RequestUpdate();
+        
         var res = this.BackingCollection.Remove(key, out _);
         if (res)
         {
@@ -77,6 +103,7 @@ public class DictionarySignal<TKey, TValue>
     bool IReadOnlyDictionary<TKey, TValue>.ContainsKey(TKey key)
     {
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.ContainsKey(key);
     }
@@ -84,6 +111,7 @@ public class DictionarySignal<TKey, TValue>
     bool IReadOnlyDictionary<TKey, TValue>.TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.TryGetValue(key, out value);
     }

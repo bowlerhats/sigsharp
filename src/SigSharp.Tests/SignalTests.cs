@@ -26,7 +26,7 @@ public class SignalTests
     public void Can_ReadLastScalar_AfterDispose()
     {
         using Signal<int> signal = new(5);
-        signal.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        signal.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalarOrDefault);
         signal.Value.ShouldBe(5);
         
         // ReSharper disable once DisposeOnUsingVariable
@@ -38,14 +38,14 @@ public class SignalTests
     [Test]
     public void CanNot_ReadLastScalar_AfterDispose_NullableStruct()
     {
-        using Signal<int?> signal = new(5);
+        using Signal<int?> signal = new(5, SignalOptions.Defaults with { DisposedAccessStrategy = DisposedSignalAccess.Strategy.LastScalar });
         signal.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
         signal.Value.ShouldBe(5);
         
         // ReSharper disable once DisposeOnUsingVariable
         signal.Dispose();
         
-        Assert.Throws<ObjectDisposedException>(() => signal.Value.ShouldBe(5));
+        Assert.Throws<SignalDisposedException>(() => signal.Value.ShouldBe(5));
     }
     
     [Test]
@@ -65,13 +65,13 @@ public class SignalTests
     {
         object testObject = new();
         
-        using Signal<object> signal = new(testObject);
+        using Signal<object> signal = new(testObject, SignalOptions.Defaults with{ DisposedAccessStrategy = DisposedSignalAccess.Strategy.LastScalar });
         signal.Value.ShouldBe(testObject);
         
         // ReSharper disable once DisposeOnUsingVariable
         signal.Dispose();
         
-        Assert.Throws<ObjectDisposedException>(() => signal.Value.ShouldBe(testObject));
+        Assert.Throws<SignalDisposedException>(() => signal.Value.ShouldBe(testObject));
     }
 
     [Test]
@@ -79,7 +79,7 @@ public class SignalTests
     {
         Signal<int> signal = new(5);
         signal.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => signal.Set(1));
+        Assert.Throws<SignalDisposedException>(() => signal.Set(1));
     }
 
     [Test]

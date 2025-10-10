@@ -137,7 +137,7 @@ public class ComputedTests
         using SignalGroup group = new();
         var sig1 = new Signal<int>(1);
         var computed = Signals.Computed(() => { sig1.Set(3); return 3; }, group);
-        Assert.Throws<SignalException>(() => computed.Update());
+        Assert.Throws<SignalReadOnlyContextException>(() => computed.Update());
     }
 
     [Test]
@@ -161,7 +161,7 @@ public class ComputedTests
         c2.IsDirty.ShouldBe(false);
         computed.IsDirty.ShouldBe(true);
         
-        Assert.Throws<ObjectDisposedException>(() => computed.Value.ShouldBe(22));
+        Assert.Throws<SignalDisposedException>(() => computed.Value.ShouldBe(22));
         
         computed.IsDirty.ShouldBe(true);
         
@@ -169,7 +169,7 @@ public class ComputedTests
         
         computed.IsDirty.ShouldBe(true);
         
-        Assert.Throws<ObjectDisposedException>(() => computed.Update());
+        Assert.Throws<SignalDisposedException>(() => computed.Update());
 
     }
     
@@ -178,11 +178,11 @@ public class ComputedTests
     {
         SignalGroup group = new();
         Signal<int> sig1 = new(1);
-        sig1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        sig1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalarOrDefault);
         
         Signal<int> sig2 = new(10);
         var c1 = Signals.Computed(() => sig1.Value + 1, group);
-        c1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalar);
+        c1.Options.DisposedAccessStrategy.ShouldBe(DisposedSignalAccess.Strategy.LastScalarOrDefault);
         
         var c2 = group.Computed(() => sig2.Value + 10);
         var computed = Signals.Computed(() => c1.Value + c2, group);

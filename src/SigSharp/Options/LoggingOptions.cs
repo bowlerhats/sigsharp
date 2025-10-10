@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SigSharp.Nodes;
+using SigSharp.Utils;
 
 namespace SigSharp;
 
@@ -43,6 +44,17 @@ public sealed partial class GlobalSignalOptions
         /// The object parameter contains the object returned by CaptureStackInfo.<br/>
         /// </remarks>
         public Action<SignalNode, Exception, object>? AugmentWithStackInfo { get; init; }
+
+        /// <summary>
+        /// Enable trace span capture
+        /// </summary>
+        public bool TraceEnabled { get; init; }
+        
+        /// <summary>
+        /// Customized trace provider.
+        /// </summary>
+        public ISignalTraceProvider? TraceProvider { get; init; }
+            = Perf.DefaultTraceProvider;
         
         public ILogger CreateLogger(Type type)
         {

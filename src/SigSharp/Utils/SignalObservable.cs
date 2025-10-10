@@ -75,7 +75,7 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
     public IDisposable Subscribe(IObserver<T> observer)
     {
         ArgumentNullException.ThrowIfNull(observer);
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        SignalDisposedException.ThrowIf(_disposed, this);
         
         var sub = new Subscription(this);
         
@@ -91,7 +91,7 @@ internal sealed class SignalObservable<T> : IObservable<T>, IDisposable
         if (_disposed)
             return;
         
-        _subscriptions.Remove(subscription);
+        _subscriptions.RemoveSafe(subscription);
     }
 
     private sealed class Subscription : IDisposable

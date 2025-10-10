@@ -22,6 +22,8 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
 
     public bool IsEmpty => _isSmall ? _set.IsEmpty : _count <= 0;
 
+    public bool HasAny => !this.IsEmpty;
+
     private int _count;
     
     public ConcurrentHashSet()
@@ -90,15 +92,26 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        if (_isSmall && _set.Add(item))
-            return true;
-        
+        if (_isSmall)
+        {
+            if (_set.Add(item))
+            {
+                return true;
+            }
+
+            if (_set.HasCapacity)
+            {
+                return false;
+            }
+        }
+
         if (!_dict.TryAdd(item, true))
             return false;
 
         Interlocked.Increment(ref _count);
-        
-        if (Interlocked.CompareExchange(ref _isSmall, false, true))
+
+        var wasSmall = Interlocked.CompareExchange(ref _isSmall, false, true);
+        if (wasSmall && !_isSmall)
         {
             foreach (var setItem in _set)
             {
@@ -121,7 +134,8 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
             return;
         }
 
-        if (Interlocked.CompareExchange(ref _isSmall, true, false))
+        var wasSmall = Interlocked.CompareExchange(ref _isSmall, true, false);
+        if (!wasSmall && _isSmall)
         {
             _set.Clear();
         }
@@ -138,7 +152,7 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
         if (_isSmall)
             return _set.Contains(item);
             
-        return !this.IsEmpty && _dict.ContainsKey(item);
+        return this.HasAny && _dict.ContainsKey(item);
     }
     
     public void CopyTo(T[] array, int arrayIndex)

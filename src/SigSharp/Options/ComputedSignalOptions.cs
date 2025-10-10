@@ -9,6 +9,11 @@ public record ComputedSignalOptions
     public IEqualityComparer? EqualityComparer { get; init; }
     
     public DisposedSignalAccess.Strategy DisposedAccessStrategy { get; init; }
-        = DisposedSignalAccess.Strategy.LastScalar;
+        = DisposedSignalAccess.Strategy.LastScalarOrDefault;
     
+    public SignalAccessStrategy AccessStrategy { get; init; }
+        = SignalAccessStrategy.PreemptiveLock;
+    
+    public SignalDefaultValueProvider DefaultValueProvider { get; init; }
+        = SignalDefaultValueProvider.DefaultInstance;
 }

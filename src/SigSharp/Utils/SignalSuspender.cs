@@ -45,16 +45,18 @@ public sealed class SignalSuspender : IDisposable, IAsyncDisposable
             _node?.Logger.LogDebug(ex, "Suspender failed to resume node");
         }
 
-        if (Interlocked.Exchange(ref _disposed, true))
-            return;
-
-        var node = Interlocked.Exchange(ref _node, null);
-        if (_alsoDisposeNode)
+        var wasDisposed = Interlocked.CompareExchange(ref _disposed, true, false); 
+        if (!wasDisposed && _disposed)
         {
-            node?.Dispose();
+            if (_alsoDisposeNode)
+            {
+                _node?.Dispose();
+            }
+
+            _node = null;
+            
+            GC.SuppressFinalize(this);
         }
-        
-        GC.SuppressFinalize(this);
     }
 
     public ValueTask DisposeAsync()

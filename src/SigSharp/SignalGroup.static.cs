@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -10,7 +11,14 @@ namespace SigSharp;
 public partial class SignalGroup
 {
     private static readonly ConditionalWeakTable<object, SignalGroup> AnchoredGroups = new();
+    private static readonly ConditionalWeakTable<object, object> DestroyedAnchors = new();
     private static readonly ConditionalWeakTable<SignalGroup, object> AllGroups = new();
+
+    internal static SignalGroup? GlobalSuspender;
+    private static readonly Lock GlobalSuspenderLock = new();
+
+    internal static SignalGroup DetachedGroup { get; }
+        = new(SignalGroupOptions.Defaults with { AutoResumeSuspendedEffects = false, WeakTrack = true });
 
     public static SignalGroup Of<TAnchor>(TAnchor anchor, SignalGroupOptions opts, string? name = null)
         where TAnchor: class
@@ -33,11 +41,24 @@ public partial class SignalGroup
         
         name ??= $"{anchor.GetType().Name} (A)";
 
-        anchoredGroup = new SignalGroup(anchor, opts, name);
-        
-        AnchoredGroups.Add(anchor, anchoredGroup);
+        lock (anchor)
+        {
+            if (AnchoredGroups.TryGetValue(anchor, out anchoredGroup))
+            {
+                return anchoredGroup;
+            }
 
-        return anchoredGroup;
+            if (DestroyedAnchors.TryGetValue(anchor, out var _))
+            {
+                throw new SignalException("Disposed signal group access");
+            }
+            
+            anchoredGroup = new SignalGroup(anchor, opts, name);
+
+            AnchoredGroups.Add(anchor, anchoredGroup);
+
+            return anchoredGroup;
+        }
     }
     
     public static SignalGroup? Of<TAnchor>(TAnchor anchor)
@@ -73,7 +94,11 @@ public partial class SignalGroup
     {
         AnchoredGroups
             .Where(kvp => kvp.Value == signalGroup)
-            .ForEach(d => AnchoredGroups.Remove(d));
+            .ForEach(d =>
+                {
+                    DestroyedAnchors.Add(d, EmptyObject);
+                    AnchoredGroups.RemoveSafe(d);
+                });
     }
 
     internal static void TrackGroup(SignalGroup signalGroup)
@@ -83,6 +108,6 @@ public partial class SignalGroup
 
     internal static void UntrackGroup(SignalGroup signalGroup)
     {
-        AllGroups.Remove(signalGroup);
+        AllGroups.RemoveSafe(signalGroup);
     }
 }

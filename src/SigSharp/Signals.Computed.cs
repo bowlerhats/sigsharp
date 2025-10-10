@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using SigSharp.Utils;
 
@@ -6,7 +7,9 @@ namespace SigSharp;
 
 public static partial class Signals
 {
-    public static ComputedSignal<T> Computed<T, TState>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TState>(
         TState state,
         Func<TState, T> func,
         SignalGroup group,
@@ -21,7 +24,9 @@ public static partial class Signals
         return new ComputedSignal<T, TState>(group, state, ComputedFunctor<T, TState>.Of(func), opts, name);
     }
     
-    public static ComputedSignal<T> Computed<T, TState>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TState>(
         TState state,
         Func<TState, ValueTask<T>> func,
         SignalGroup group,
@@ -36,7 +41,9 @@ public static partial class Signals
         return new ComputedSignal<T, TState>(group, state, ComputedFunctor<T, TState>.Of(func), opts, name);
     }
     
-    public static ComputedSignal<T> Computed<T>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T>(
         Func<T> func,
         SignalGroup group,
         ComputedSignalOptions? opts = null,
@@ -49,7 +56,9 @@ public static partial class Signals
         return new ComputedSignal<T>(group, ComputedFunctor<T>.Of(func), opts, name);
     }
     
-    public static ComputedSignal<T> Computed<T>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T>(
         Func<ValueTask<T>> func,
         SignalGroup group,
         ComputedSignalOptions? opts = null,
@@ -62,7 +71,9 @@ public static partial class Signals
         return new ComputedSignal<T>(group, ComputedFunctor<T>.Of(func), opts, name);
     }
     
-    public static ComputedSignal<T> Computed<T>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T>(
         Func<Signal<T>> func,
         SignalGroup group,
         ComputedSignalOptions? opts = null,
@@ -75,7 +86,9 @@ public static partial class Signals
         return Computed(func, static f => f().Get(), group, opts, name);
     }
     
-    public static ComputedSignal<T> Computed<T>(
+    public static ComputedSignal<T> Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T>(
         Func<ValueTask<Signal<T>>> func,
         SignalGroup group,
         ComputedSignalOptions? opts = null,

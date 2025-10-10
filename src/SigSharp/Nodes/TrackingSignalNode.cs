@@ -1,4 +1,5 @@
-﻿using SigSharp.TrackerStores;
+﻿using System.Threading.Tasks;
+using SigSharp.TrackerStores;
 using SigSharp.Utils;
 
 namespace SigSharp.Nodes;
@@ -6,33 +7,29 @@ namespace SigSharp.Nodes;
 public abstract class TrackingSignalNode : ReactiveNode
 {
     public bool HasTracking => _store?.HasAny ?? false;
-    public bool IsDirty { get; private set; } = true;
     
     private ITrackerStore? _store;
     
     private bool _trackingDisabled;
     
-    protected TrackingSignalNode(SignalGroup group, bool isTrackable, string? name)
-        :base(group, isTrackable, name)
+    protected TrackingSignalNode(SignalGroup group, bool isTrackable, bool initiallyDirty, string? name)
+        :base(group, isTrackable, initiallyDirty, name)
     {
         _store = new ConcurrentTrackerStore();
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _store?.Clear();
-            _store?.Dispose();
-            _store = null!;
-        }
+        _store?.Clear();
+        _store?.Dispose();
+        _store = null!;
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
     }
 
     protected override void ReferenceChanged(SignalNode refNode)
     {
-        if (this.IsDisposed || _trackingDisabled || refNode.IsDisposed)
+        if (this.IsDisposing || _trackingDisabled || refNode.IsDisposing)
             return;
         
         this.MarkDirty();
@@ -55,21 +52,6 @@ public abstract class TrackingSignalNode : ReactiveNode
         base.ReferenceDisposed(refNode);
     }
 
-    protected virtual void OnDirty()
-    {
-        if (this.IsDisposed)
-            return;
-        
-        this.WithEachReferencing(static node =>
-                {
-                    if (node is TrackingSignalNode { IsDirty: false } trackingNode)
-                    {
-                        trackingNode.MarkDirty();
-                    }
-                }
-            );
-    }
-
     protected void DisableTracking()
     {
         _trackingDisabled = true;
@@ -87,27 +69,9 @@ public abstract class TrackingSignalNode : ReactiveNode
         oldStore?.Dispose();
     }
 
-    public void MarkDirty()
-    {
-        if (this.IsDirty || this.IsDisposed)
-            return;
-        
-        this.IsDirty = true;
-        
-        this.OnDirty();
-    }
-
-    public void MarkPristine()
-    {
-        if (this.IsDisposed)
-            return;
-        
-        this.IsDirty = false;
-    }
-
     public void Track(SignalNode node)
     {
-        if (_trackingDisabled || node == this || node.IsDisposed)
+        if (_trackingDisabled || node == this || node.IsDisposing)
             return;
         
         node.AddReferencedBy(this);
@@ -137,7 +101,7 @@ public abstract class TrackingSignalNode : ReactiveNode
     {
         this.CheckDisposed();
         
-        return SignalTracker.Push(expectEmpty);
+        return SignalTracker.Push(expectEmpty, this);
     }
 
     internal void EndTrack(SignalTracker tracker)
@@ -145,6 +109,9 @@ public abstract class TrackingSignalNode : ReactiveNode
         try
         {
             this.CheckDisposed();
+
+            if (!tracker.IsTracking)
+                return;
             
             this.UpdateTrackerStore(tracker.Tracked);
         }
@@ -161,7 +128,7 @@ public abstract class TrackingSignalNode : ReactiveNode
         
         _store?.WithEach((this, nodes), static (state, trackedNode) =>
         {
-            if (trackedNode.IsDisposed || !state.nodes.Contains(trackedNode))
+            if (trackedNode.IsDisposing || !state.nodes.Contains(trackedNode))
             {
                 state.Item1.UnTrack(trackedNode);
             }
@@ -169,7 +136,7 @@ public abstract class TrackingSignalNode : ReactiveNode
         
         foreach (var node in nodes)
         {
-            if (node.IsDisposed || (_store?.Contains(node) ?? false))
+            if (node.IsDisposing || (_store?.Contains(node) ?? false))
                 continue;
 
             this.Track(node);

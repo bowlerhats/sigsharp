@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using SigSharp.Utils;
 
@@ -7,15 +9,20 @@ namespace SigSharp;
 
 public static class ComputedExtensions
 {
+    internal static readonly AsyncLocal<bool> CapturePluck = new();
+    
     #region Factories
     
-    private static ComputedSignal<T> CreateComputed<T, TAnchor>(
+    private static ComputedSignal<T>? CreateComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         TAnchor anchor,
         Func<T> func,
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
     {
         ArgumentNullException.ThrowIfNull(anchor);
@@ -27,20 +34,28 @@ public static class ComputedExtensions
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
 
         var signal = name is null
-            ? group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), cm!, lineNumber, opts)
-            : group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), name, 0, opts);
+            ? group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), cm!, lineNumber, optsBuilder)
+            : group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), name, 0, optsBuilder);
+
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
 
         return signal;
     }
     
-    private static ComputedSignal<T> CreateComputedWithState<T, TAnchor, TState>(
+    private static ComputedSignal<T>? CreateComputedWithState<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         TAnchor anchor,
         TState state,
         Func<TState, T> func,
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
     {
         ArgumentNullException.ThrowIfNull(anchor);
@@ -52,13 +67,20 @@ public static class ComputedExtensions
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
 
         var signal = name is null
-            ? group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), cm!, lineNumber, opts)
-            : group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), name, 0, opts);
+            ? group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), cm!, lineNumber, optsBuilder)
+            : group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), name, 0, optsBuilder);
+        
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
         
         return signal;
     }
     
-    private static ComputedSignal<T> CreateWeakComputed<T, TAnchor, TState>(
+    private static ComputedSignal<T>? CreateWeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         TAnchor anchor,
         TState state,
         Func<TState, T>? func,
@@ -66,7 +88,8 @@ public static class ComputedExtensions
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
         where TState: class
     {
@@ -85,7 +108,7 @@ public static class ComputedExtensions
                 ComputedFunctor<Signal<T>, TState>.Of(wrappedFunc),
                 cm!,
                 lineNumber,
-                opts
+                optsBuilder
                 )
             : group.GetOrCreateWeakComputed(
                 state,
@@ -93,13 +116,20 @@ public static class ComputedExtensions
                 ComputedFunctor<Signal<T>, TState>.Of(wrappedFunc),
                 name,
                 0,
-                opts
+                optsBuilder
                 );
+        
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
         
         return signal;
     }
     
-    private static ComputedSignal<T> CreateWeakComputed<T, TAnchor, TState>(
+    private static ComputedSignal<T>? CreateWeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>>? func,
@@ -107,7 +137,8 @@ public static class ComputedExtensions
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
         where TState: class
     {
@@ -126,7 +157,7 @@ public static class ComputedExtensions
                 ComputedFunctor<Signal<T>, TState>.Of(wrappedFunc),
                 cm!,
                 lineNumber,
-                opts
+                optsBuilder
                 )
             : group.GetOrCreateWeakComputed(
                 state,
@@ -134,8 +165,13 @@ public static class ComputedExtensions
                 ComputedFunctor<Signal<T>, TState>.Of(wrappedFunc),
                 name,
                 0,
-                opts
+                optsBuilder
                 );
+        
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
         
         return signal;
     }
@@ -144,13 +180,16 @@ public static class ComputedExtensions
     
     #region Async factories
     
-    private static ComputedSignal<T> CreateComputed<T, TAnchor>(
+    private static ComputedSignal<T>? CreateComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         TAnchor anchor,
         Func<ValueTask<T>> func,
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
     {
         ArgumentNullException.ThrowIfNull(anchor);
@@ -162,20 +201,28 @@ public static class ComputedExtensions
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
 
         var signal = name is null
-            ? group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), cm!, lineNumber, opts)
-            : group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), name, 0, opts);
+            ? group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), cm!, lineNumber, optsBuilder)
+            : group.GetOrCreateComputed(ComputedFunctor<T>.Of(func), name, 0, optsBuilder);
+        
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
 
         return signal;
     }
     
-    private static ComputedSignal<T> CreateComputedWithState<T, TAnchor, TState>(
+    private static ComputedSignal<T>? CreateComputedWithState<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>> func,
         string? name,
         string? cm,
         int lineNumber,
-        ComputedSignalOptions? opts)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TAnchor: class
     {
         ArgumentNullException.ThrowIfNull(anchor);
@@ -187,8 +234,13 @@ public static class ComputedExtensions
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
 
         var signal = name is null
-            ? group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), cm!, lineNumber, opts)
-            : group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), name, 0, opts);
+            ? group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), cm!, lineNumber, optsBuilder)
+            : group.GetOrCreateComputed(state, ComputedFunctor<T, TState>.Of(func), name, 0, optsBuilder);
+        
+        if (signal is not null && CapturePluck.Value)
+        {
+            throw new SignalPluckException<T>(signal);
+        }
         
         return signal;
     }
@@ -197,195 +249,318 @@ public static class ComputedExtensions
     
     #region Regular compute
     
-    public static T Computed<T, TAnchor>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         this TAnchor anchor,
         Func<T> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputed(anchor, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputed(anchor, func, name, cm, lineNumber, optsBuilder);
+
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+        
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
-    
-    public static T Computed<T, TAnchor>(
+
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]
+        T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, T> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
-        [CallerLineNumber] int lineNumber = 0)
-        where TAnchor: class
+        [CallerLineNumber] int lineNumber = 0
+        )
+        where TAnchor : class
     {
-        return CreateComputedWithState(anchor, anchor, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputedWithState(anchor, anchor, func, name, cm, lineNumber, optsBuilder);
+
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
-    
-    public static T Computed<T, TAnchor, TState>(
+
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]
+        T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, T> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
-        [CallerLineNumber] int lineNumber = 0)
-        where TAnchor: class
+        [CallerLineNumber] int lineNumber = 0
+        )
+        where TAnchor : class
     {
-        return CreateComputedWithState(anchor, state, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputedWithState(anchor, state, func, name, cm, lineNumber, optsBuilder);
+
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
-    
-    public static T WeakComputed<T, TAnchor, TState>(
+
+    public static T WeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]
+        T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, T> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
-        [CallerLineNumber] int lineNumber = 0)
-        where TAnchor: class
-        where TState: class
+        [CallerLineNumber] int lineNumber = 0
+        )
+        where TAnchor : class
+        where TState : class
     {
-        return CreateWeakComputed(anchor, state, func, null, name, cm, lineNumber, opts).Get();
+        var computed = CreateWeakComputed(anchor, state, func, null, name, cm, lineNumber, optsBuilder);
+
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
-    
+
     #endregion
 
     #region Signal unwrap
     
-    public static T Computed<T, TAnchor>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         this TAnchor anchor,
         Func<Signal<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputedWithState(anchor, func, static d => d().Get(), name, cm, lineNumber, opts).Get();
+        var computed = CreateComputedWithState(anchor, func, static d => d().Get(), name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T Computed<T, TAnchor>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, Signal<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputedWithState(
+        var computed = CreateComputedWithState(
             anchor,
             (func, anchor),
             static d => d.func(d.anchor).Get(),
             name,
             cm,
             lineNumber,
-            opts
-            ).Get();
+            optsBuilder
+            );
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T Computed<T, TAnchor, TState>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, Signal<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class, IDisposable
     {
-        return CreateComputedWithState(
+        var computed = CreateComputedWithState(
             anchor,
             (func, state),
             static d => d.func(d.state).Get(),
             name,
             cm,
             lineNumber,
-            opts
-            ).Get();
+            optsBuilder
+            );
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T WeakComputed<T, TAnchor, TState>(
+    public static T WeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, Signal<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class, IDisposable
         where TState: class
     {
-        return CreateWeakComputed(anchor, state, null, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateWeakComputed(anchor, state, null, func, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
     #endregion
     
     #region Async unwrap
     
-    public static T Computed<T, TAnchor>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         this TAnchor anchor,
         Func<ValueTask<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputed(anchor, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputed(anchor, func, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T Computed<T, TAnchor>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor>(
         this TAnchor anchor,
         Func<TAnchor, ValueTask<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputedWithState(anchor, anchor, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputedWithState(anchor, anchor, func, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T Computed<T, TAnchor, TState>(
+    public static T Computed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
     {
-        return CreateComputedWithState(anchor, state, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateComputedWithState(anchor, state, func, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T WeakComputed<T, TAnchor, TState>(
+    public static T WeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<T>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
         where TState: class
     {
-        return CreateWeakComputed<T, TAnchor, TState>(anchor, state, func, null, name, cm, lineNumber, opts).Get();
+        var computed = CreateWeakComputed<T, TAnchor, TState>(anchor, state, func, null, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
-    public static T WeakComputed<T, TAnchor, TState>(
+    public static T WeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TAnchor, TState>(
         this TAnchor anchor,
         TState state,
         Func<TState, ValueTask<Signal<T>>> func,
-        ComputedSignalOptions? opts = null,
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null,
         string? name = null,
         [CallerMemberName] string? cm = null,
         [CallerLineNumber] int lineNumber = 0)
         where TAnchor: class
         where TState: class
     {
-        return CreateWeakComputed(anchor, state, null, func, name, cm, lineNumber, opts).Get();
+        var computed = CreateWeakComputed(anchor, state, null, func, name, cm, lineNumber, optsBuilder);
+        
+        if (computed is not null)
+            return computed.Get();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
+
+        return opts.DefaultValueProvider.GetDefaultValue<T>(default)!;
     }
     
     #endregion

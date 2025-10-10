@@ -2,7 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using SigSharp.Nodes;
+using SigSharp.Utils;
 
 namespace SigSharp.TrackerStores;
 
@@ -12,6 +15,7 @@ public sealed class WeakTrackerStore : ITrackerStore
 
     public bool HasAny => _tracked.Any();
     
+    // TODO: Use WeakSet when stable
     private readonly ConditionalWeakTable<SignalNode, object> _tracked = [];
     private bool _disposed;
     
@@ -19,10 +23,12 @@ public sealed class WeakTrackerStore : ITrackerStore
     {
         if (_disposed)
             return;
-        
-        _tracked.Clear();
-        
-        _disposed = true;
+
+        var wasDisposed = Interlocked.CompareExchange(ref _disposed, true, false); 
+        if (!wasDisposed && _disposed)
+        {
+            _tracked.Clear();
+        }
     }
 
     public void Clear()
@@ -48,7 +54,7 @@ public sealed class WeakTrackerStore : ITrackerStore
     {
         this.CheckDisposed();
         
-        _tracked.Remove(node);
+        _tracked.RemoveSafe(node);
     }
     
     public void WithEach(Action<SignalNode> action)
@@ -66,7 +72,23 @@ public sealed class WeakTrackerStore : ITrackerStore
             action(state, node);
         }
     }
+
+    public async ValueTask WithEachAsync(Func<SignalNode, ValueTask> action)
+    {
+        foreach (var (node, _) in _tracked)
+        {
+            await action(node);
+        }
+    }
     
+    public async ValueTask WithEachAsync<TState>(TState state, Func<TState, SignalNode, ValueTask> action)
+    {
+        foreach (var (node, _) in _tracked)
+        {
+            await action(state, node);
+        }
+    }
+
     public void Collect<TSignalNode>(ICollection<TSignalNode> target)
         where TSignalNode : SignalNode
     {

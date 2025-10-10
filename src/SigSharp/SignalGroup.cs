@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,28 +17,41 @@ public sealed partial class SignalGroup: SignalNode
     private static readonly AsyncLocal<SignalGroup?> CurrentBoundGroup = new();
 
     public static SignalGroup? Current => CurrentBoundGroup.Value;
-    
-    public static SignalGroup CreateBound(SignalGroupOptions? opts = null, string? name = null)
-    {
-        var group = new SignalGroup(opts, name);
-        
-        group.Bind();
-        
-        return group;
-    }
 
-    public static SignalSuspender CreateSuspended(SignalGroupOptions? opts = null, string? name = null)
+    internal static SignalSuspender CreateGlobalSuspended(SignalGroupOptions? opts = null, string? name = null)
+    {
+        lock (GlobalSuspenderLock)
+        {
+            name ??= "GlobalSuspender";
+
+            var group = new SignalGroup(opts, name);
+
+            var sus = group.Suspend(true);
+            
+            var current = GlobalSuspender;
+            group._bindParent = current;
+            GlobalSuspender = group;
+
+            return sus;
+        }
+    }
+    
+    internal static SignalSuspender CreateSuspended(SignalGroupOptions? opts = null, string? name = null)
     {
         name ??= "Suspender";
         
         var group = new SignalGroup(opts, name);
+
+        var sus = group.Suspend(true);
         
         group.Bind();
-    
-        return group.Suspend(true);
+
+        return sus;
     }
     
     public SignalGroupOptions Options { get; }
+
+    internal ITrackerStore MemberStore => _memberStore;
 
     private readonly INamedTrackerStore _namedStore;
     private readonly ITrackerStore _memberStore;
@@ -48,7 +62,7 @@ public sealed partial class SignalGroup: SignalNode
     private SignalGroup? _bindParent;
     
     public SignalGroup(SignalGroupOptions? opts = null, string? name = null)
-        : base(false, name)
+        : base(false, false, name)
     {
         this.Options = opts ?? SignalGroupOptions.Defaults;
 
@@ -71,6 +85,9 @@ public sealed partial class SignalGroup: SignalNode
     {
         this.Options.DisposeLinker?.Invoke(this, anchor);
     }
+    
+    public override void MarkDirty() { }
+    public override void MarkPristine() { }
 
     public override void Resume()
     {
@@ -81,7 +98,7 @@ public sealed partial class SignalGroup: SignalNode
 
     public async ValueTask<bool> WaitIdleAsync(TimeSpan? waitBetweenChecks = null, CancellationToken stopToken = default)
     {
-        if (this.IsDisposed || this.IsSuspended || !_memberStore.HasAny)
+        if (this.IsDisposing || this.IsSuspended || !_memberStore.HasAny)
             return false;
         
         HashSet<SignalEffect> effects = [];
@@ -99,10 +116,10 @@ public sealed partial class SignalGroup: SignalNode
             
             foreach (var effect in effects)
             {
-                if (effect.IsDisposed || effect.IsSuspended)
+                if (effect.IsDisposing || effect.IsSuspended)
                     continue;
 
-                if (await effect.WaitIdleAsync(stopToken))
+                if (await effect.WaitIdleAsync(stopToken: stopToken))
                 {
                     isWorking = true;
                     wasWorking = true;
@@ -119,22 +136,32 @@ public sealed partial class SignalGroup: SignalNode
 
     public bool TryQueueSuspended(SignalEffect effect)
     {
-        if (!this.IsSuspended || _queued.Contains(effect))
+        if (!this.IsSuspended)
             return false;
-        
-        _queued.Enqueue(effect);
+
+        if (!_queued.Contains(effect))
+            _queued.Enqueue(effect);
 
         return true;
     }
 
-    public void Bind()
+    internal void Bind()
     {
+        if (Current == this)
+        {
+            
+        }
         _bindParent = Current;
         CurrentBoundGroup.Value = this;
     }
 
-    public void Unbind()
+    internal void Unbind()
     {
+        if (GlobalSuspender == this)
+        {
+            GlobalSuspender = _bindParent;
+        }
+        
         if (Current == this)
         {
             CurrentBoundGroup.Value = _bindParent;
@@ -146,44 +173,51 @@ public sealed partial class SignalGroup: SignalNode
         return _bindParent == group || (_bindParent?.HasBound(group) ?? false);
     }
 
-    protected override void Dispose(bool disposing)
+    protected override async ValueTask DisposeAsyncCore()
     {
-        if (disposing)
+        this.Unbind();
+            
+        if (this.IsSuspended && this.Options.AutoResumeSuspendedEffects)
         {
-            this.Unbind();
+            this.ResumeEffects(true);
+        }
             
-            if (this.IsSuspended && this.Options.AutoResumeSuspendedEffects)
+        await _memberStore.WithEachAsync(static async node =>
             {
-                this.ResumeEffects(true);
-            }
-            
-            _memberStore.WithEach(static node =>
-            {
-                if (node is { IsDisposed: false, DisposedBySignalGroup: true })
+                if (node is { IsDisposing: false, DisposedBySignalGroup: true })
                 {
-                    node.Dispose();
+                    if (node is SignalEffect effect)
+                    {
+                        effect.StopAutoRun();
+                        
+                        await effect.WaitIdleAsync();
+                    }
+                    
+                    await node.DisposeAsync();
                 }
             });
-            
-            _memberStore.Clear();
-            _memberStore.Dispose();
-            
+
+        _memberStore.Clear();
+        _memberStore.Dispose();
+
+        lock (_trackLock)
+        {
             _namedStore.Clear();
             _namedStore.Dispose();
-            
-            RemoveAnchored(this);
-        
-            UntrackGroup(this);
         }
+
+        RemoveAnchored(this);
         
-        base.Dispose(disposing);
+        UntrackGroup(this);
+        
+        await base.DisposeAsyncCore();
     }
 
     public bool AddMember(SignalNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         
-        if (this.IsDisposed || node == this)
+        if (this.IsDisposing || node == this)
             return false;
         
         return _memberStore.Track(node);
@@ -199,12 +233,18 @@ public sealed partial class SignalGroup: SignalNode
         _memberStore.UnTrack(node);
     }
 
-    internal ComputedSignal<T> GetOrCreateComputed<T>(
+    internal ComputedSignal<T>? GetOrCreateComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T>(
         ComputedFunctor<T> functor,
         string name,
         int line,
-        ComputedSignalOptions? opts = null)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
     {
+        if (this.IsDisposing)
+            return null;
+        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<ComputedSignal<T>>(id);
@@ -213,10 +253,12 @@ public sealed partial class SignalGroup: SignalNode
             return signal;
         
         this.CheckDisposed();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
         
         signal = new ComputedSignal<T>(this, functor, opts, name);
         
-        ComputedSignal<T> tracked = this.TrackComputed(signal, id);
+        var tracked = this.TrackComputed(signal, id);
         if (tracked != signal)
         {
             signal.Dispose();
@@ -226,13 +268,19 @@ public sealed partial class SignalGroup: SignalNode
         return signal;
     }
     
-    internal ComputedSignal<T, TState> GetOrCreateComputed<T, TState>(
+    internal ComputedSignal<T, TState>? GetOrCreateComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TState>(
         TState state,
         ComputedFunctor<T, TState> functor,
         string name,
         int line,
-        ComputedSignalOptions? opts = null)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
     {
+        if (this.IsDisposing)
+            return null;
+        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<ComputedSignal<T, TState>>(id);
@@ -241,10 +289,12 @@ public sealed partial class SignalGroup: SignalNode
             return signal;
         
         this.CheckDisposed();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
         
         signal = new ComputedSignal<T, TState>(this, state, functor, opts, name);
         
-        ComputedSignal<T, TState> tracked = this.TrackComputed(signal, id);
+        var tracked = this.TrackComputed(signal, id);
         if (tracked != signal)
         {
             signal.Dispose();
@@ -254,15 +304,21 @@ public sealed partial class SignalGroup: SignalNode
         return signal;
     }
     
-    internal WeakComputedSignal<T, TState> GetOrCreateWeakComputed<T, TState>(
+    internal WeakComputedSignal<T, TState>? GetOrCreateWeakComputed<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+            )]T, TState>(
         TState state,
         ComputedFunctor<T, TState> functor,
         ComputedFunctor<Signal<T>, TState> wrappedFunctor,
         string name,
         int line,
-        ComputedSignalOptions? opts = null)
+        Func<ComputedSignalOptions, ComputedSignalOptions>? optsBuilder = null
+        )
         where TState: class
     {
+        if (this.IsDisposing)
+            return null;
+        
         var id = new ComputedSignalId(name, line);
 
         var signal = this.LookupComputed<WeakComputedSignal<T, TState>>(id);
@@ -271,6 +327,8 @@ public sealed partial class SignalGroup: SignalNode
             return signal;
         
         this.CheckDisposed();
+
+        var opts = optsBuilder?.Invoke(ComputedSignalOptions.Defaults) ?? ComputedSignalOptions.Defaults;
         
         signal = new WeakComputedSignal<T, TState>(
             this,
@@ -280,7 +338,7 @@ public sealed partial class SignalGroup: SignalNode
             opts,
             name);
 
-        WeakComputedSignal<T, TState> tracked = this.TrackComputed(signal, id);
+        var tracked = this.TrackComputed(signal, id);
         if (tracked != signal)
         {
             signal.Dispose();
@@ -293,7 +351,10 @@ public sealed partial class SignalGroup: SignalNode
     private T? LookupComputed<T>(ComputedSignalId id)
         where T: SignalNode
     {
-        return _namedStore.LookupComputed<T>(id);
+        lock (_trackLock)
+        {
+            return _namedStore.LookupComputed<T>(id);
+        }
     }
 
     private TNode TrackComputed<TNode>(TNode node, ComputedSignalId id)
@@ -306,18 +367,16 @@ public sealed partial class SignalGroup: SignalNode
             if (existing is not null)
                 return existing;
 
-            if (this.AddMember(node))
-            {
-                if (!_namedStore.Track(node, id))
-                {
-                    this.RemoveMember(node);
-                    
-                    throw new SignalException("Failed to track named computed signal node");
-                }
-            }
-            else
+            if (!this.AddMember(node) && !_memberStore.Contains(node))
             {
                 throw new SignalException("Failed to track computed signal node");
+            }
+            
+            if (!_namedStore.Track(node, id))
+            {
+                this.RemoveMember(node);
+                
+                throw new SignalException("Failed to track named computed signal node");
             }
         }
 
@@ -326,14 +385,35 @@ public sealed partial class SignalGroup: SignalNode
 
     private void ResumeEffects(bool ignoreMembers)
     {
+        var bound = Current;
+        if (bound is not null && (bound == this || bound.HasBound(this)))
+            bound = _bindParent;
+
+        while (_bindParent is not null && !_bindParent.IsSuspended)
+        {
+            _bindParent = _bindParent._bindParent;
+        }
+
+        bound ??= GlobalSuspender;
+        
         HashSet<SignalEffect> scheduled = [];
         
         while (_queued.TryDequeue(out var effect))
         {
+            if (effect.IsDisposing)
+                continue;
+            
             if (!ignoreMembers || !_memberStore.Contains(effect))
             {
                 if (scheduled.Add(effect))
-                    effect.Schedule();
+                {
+                    if (bound is not null && bound != this && bound.TryQueueSuspended(effect))
+                    {
+                        continue;
+                    }
+                    
+                    effect.Schedule(true);
+                }
             }
         }
     }

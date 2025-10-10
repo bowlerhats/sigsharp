@@ -11,6 +11,11 @@ internal sealed class ItemPool<T>
     {
         _channel = Channel.CreateBounded<T>(capacity);
     }
+
+    public void Clear()
+    {
+        while (_channel.Reader.TryRead(out _)) { }
+    }
     
     public T Rent()
     {

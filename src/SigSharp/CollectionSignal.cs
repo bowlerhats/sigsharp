@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -13,6 +14,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         get
         {
             this.MarkTracked();
+            this.RequestAccess();
+            
             return this.BackingCollection.Count;
         }
     }
@@ -22,6 +25,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         get
         {
             this.MarkTracked();
+            this.RequestAccess();
+            
             return this.BackingCollection.IsReadOnly;
         }
     }
@@ -36,9 +41,11 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         IEnumerable<T> initialValues,
         CollectionSignalOptions? opts = null,
         string? name = null
-        ) : base(true, name)
+        ) : base(true, false, name ?? $"CollectionSignal<{typeof(T).Name}, {typeof(TCollection).Name}>")
     {
         this.Options = opts ?? CollectionSignalOptions.Defaults;
+
+        this.SetAccessStrategy(this.Options.AccessStrategy);
         
         // Justification: The alternative is to make it Lazy, but it would have too much overhead
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -47,21 +54,34 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
 
     protected abstract TCollection CreateBackingCollection(IEnumerable<T> initialValues);
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _disposedCapture = DisposedSignalAccess.Capture(
-                this.BackingCollection,
-                this,
-                this.Options.DisposedAccessStrategy,
-                TypeUtils.IsNullableByDefault<T>()
-                );
+        var emptyCollection = this.Options.DisposedAccessStrategy switch
+            {
+                DisposedSignalAccess.Strategy.DefaultValue or DisposedSignalAccess.Strategy.DefaultScalar
+                    => this.CreateDefaultEmptyBackingCollection(),
+                _   => default!
+            };
 
-            this.BackingCollection = default!;
-        }
+        _disposedCapture = DisposedSignalAccess.Capture(
+            this.BackingCollection,
+            emptyCollection,
+            this,
+            this.Options.DisposedAccessStrategy,
+            TypeUtils.IsNullableByDefault<T>()
+            );
+
+        this.BackingCollection = default!;
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
+    }
+    
+    public sealed override void MarkDirty() { }
+    public sealed override void MarkPristine() { }
+
+    protected virtual TCollection CreateDefaultEmptyBackingCollection()
+    {
+        return this.CreateBackingCollection([]);
     }
 
     public IEnumerator<T> GetEnumerator()
@@ -74,6 +94,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         }
 
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.BackingCollection.GetEnumerator();
     }
@@ -87,6 +108,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     {
         this.CheckDisposed();
         
+        this.RequestUpdate();
+        
         this.BackingCollection.Clear();
         newValues.ForEach(this.BackingCollection.Add);
         this.Changed();
@@ -96,6 +119,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     {
         this.CheckDisposed();
         
+        this.RequestUpdate();
+        
         this.BackingCollection.Add(item);
         this.Changed();
     }
@@ -103,6 +128,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     public void Clear()
     {
         this.CheckDisposed();
+        
+        this.RequestUpdate();
         
         this.BackingCollection.Clear();
         this.Changed();
@@ -118,6 +145,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         }
 
         this.MarkTracked();
+        this.RequestAccess();
         
         return this.BackingCollection.Contains(item);
     }
@@ -134,6 +162,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         }
         
         this.MarkTracked();
+        this.RequestAccess();
         
         this.BackingCollection.CopyTo(array, arrayIndex);
     }
@@ -141,6 +170,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     public bool Remove(T item)
     {
         this.CheckDisposed();
+        
+        this.RequestUpdate();
         
         var res = this.BackingCollection.Remove(item);
         if (res)

@@ -29,7 +29,7 @@ public class SignalEffect : TrackingSignalNode
     private readonly Lock _timerLock = new();
     private readonly Lock _scheduleLock = new();
     private SemaphoreSlim _runLock = new(1);
-    private AsyncManualResetEvent _idle = new(true);
+    private readonly AsyncManualResetEvent _idle = new(true);
     
     private SignalEffectFunctor _effectFunctor;
     private readonly ISignalEffectScheduler _effectScheduler;
@@ -47,7 +47,7 @@ public class SignalEffect : TrackingSignalNode
         SignalEffectOptions? options = null,
         bool skipAutoStart = false,
         CancellationToken stopToken = default)
-        : base(group, false, name)
+        : base(group, false, false, name)
     {
         _effectFunctor = effectFunctor;
         
@@ -80,12 +80,13 @@ public class SignalEffect : TrackingSignalNode
         _tokenRegistration = stopToken.Register(this.StopAutoRun);
     }
 
-    protected override void Dispose(bool disposing)
+    protected override async ValueTask DisposeAsyncCore()
     {
-        if (disposing)
+        // ReSharper disable once MethodSupportsCancellation
+        await _runLock.WaitAsync();
+        
+        try
         {
-            _runLock.Wait(TimeSpan.FromSeconds(3));
-            
             if (_asTask is not null)
             {
                 if (!_asTask.Task.IsCompleted)
@@ -93,22 +94,28 @@ public class SignalEffect : TrackingSignalNode
                     _asTask.SetResult();
                 }
             }
-            
+
             _asTask = null;
 
             _tokenRegistration.Unregister();
-            
+
             this.CancelTimer();
             
+            _canSchedule = false;
+
             _effectFunctor = default;
-            
+
             _idle.Dispose();
-            
-            _runLock.Dispose();
-            _runLock = null!;
         }
-        
-        base.Dispose(disposing);
+        finally
+        {
+            var rLock = _runLock;
+            _runLock = null!;
+            
+            rLock.Dispose();
+        }
+
+        await base.DisposeAsyncCore();
     }
 
     protected virtual async ValueTask<SignalEffectResult> InvokeRunnerFunc()
@@ -134,12 +141,14 @@ public class SignalEffect : TrackingSignalNode
 
         if (result.ShouldDestroy)
         {
-            Signals.Untracked(() =>
+            _canSchedule = false;
+            
+            Signals.Detached(() =>
             {
                 Task.Factory.StartNew(async () =>
                 {
-                    await Task.Delay(500, this.StopToken);
-                    this.Dispose();
+                    await Task.Delay(100, this.StopToken);
+                    await this.DisposeAsync();
                 }, this.StopToken);
             });
         }
@@ -152,7 +161,7 @@ public class SignalEffect : TrackingSignalNode
         if (!this.IsAutoRunning)
             return;
         
-        if (this.IsDisposed || this.StopToken.IsCancellationRequested)
+        if (this.IsDisposing || this.StopToken.IsCancellationRequested)
             return;
 
         if (SignalTracker.Current?.AcceptEffects ?? false)
@@ -167,6 +176,9 @@ public class SignalEffect : TrackingSignalNode
             if (!_canSchedule || !_idle.IsSet)
                 return;
         }
+
+        if (this.EnqueueAsSuspended())
+            return;
         
         if (_debounceMs <= 0)
         {
@@ -211,35 +223,52 @@ public class SignalEffect : TrackingSignalNode
         }
     }
 
-    public bool WaitIdle(CancellationToken? stopToken = null)
+    public bool WaitIdle(TimeSpan? timeout = null, CancellationToken? stopToken = null)
     {
-        this.CheckDisposed();
-
+        if (this.IsDisposing)
+            return false;
+        
         if (_idle.IsSet)
             return false;
 
         stopToken = stopToken.HasValue
             ? CancellationTokenSource.CreateLinkedTokenSource(this.StopToken, stopToken.Value).Token
             : this.StopToken;
-        
-        _idle.Wait(stopToken.Value);
-        
+
+        if (timeout.HasValue)
+        {
+            _idle.Wait(timeout, stopToken.Value);
+        }
+        else
+        {
+            _idle.Wait(stopToken: stopToken.Value);
+        }
+
         return true;
     }
 
-    public Task<bool> WaitIdleAsync(CancellationToken? stopToken = null)
+    public async Task<bool> WaitIdleAsync(TimeSpan? timeout = null, CancellationToken? stopToken = null)
     {
-        this.CheckDisposed();
-
+        if (this.IsDisposing)
+            return false;
+        
         if (_idle.IsSet)
-            return Task.FromResult(false);
-
+            return false;
+        
         stopToken = stopToken.HasValue
             ? CancellationTokenSource.CreateLinkedTokenSource(this.StopToken, stopToken.Value).Token
             : this.StopToken;
         
-        return _idle.WaitAsync(stopToken.Value)
-            .ContinueWith(static _ => true, TaskContinuationOptions.ExecuteSynchronously);
+        if (timeout.HasValue)
+        {
+            await _idle.WaitAsync(timeout, stopToken.Value);
+        }
+        else
+        {
+            await _idle.WaitAsync(stopToken: stopToken.Value);
+        }
+
+        return true;
     }
     
     public Task AsTask()
@@ -255,16 +284,6 @@ public class SignalEffect : TrackingSignalNode
 
             return _asTask.Task;
         }
-    }
-
-    public void RunImmediate()
-    {
-        this.CheckDisposed();
-
-        var shouldReschedule = this.DoRunSync();
-        
-        if (shouldReschedule)
-            this.Schedule(true);
     }
 
     private void NotIdle()
@@ -320,7 +339,7 @@ public class SignalEffect : TrackingSignalNode
         }
     }
     
-    private void Schedule(bool forced)
+    internal void Schedule(bool forced)
     {
         if (this.StopToken.IsCancellationRequested)
         {
@@ -346,8 +365,31 @@ public class SignalEffect : TrackingSignalNode
                 {
                     _canSchedule = false;
                     
+                    this.NotIdle();
+                    
                     return;
                 }
+            }
+            else
+            {
+                lock (_timerLock)
+                {
+                    if (_debounceTimer is not null)
+                    {
+                        this.ExtendDebounce();
+
+                        return;
+                    }
+                }
+            }
+
+            var currentTracker = SignalTracker.Current;
+            
+            if (currentTracker?.AcceptEffects ?? false)
+            {
+                currentTracker.PostEffect(this);
+
+                return;
             }
 
             _canSchedule = false;
@@ -356,7 +398,7 @@ public class SignalEffect : TrackingSignalNode
             
             try
             {
-                Signals.Untracked(
+                Signals.Detached(
                     () =>
                         {
                             if (!_effectScheduler.Schedule(this, this.RunScheduled, this.StopToken))
@@ -369,42 +411,28 @@ public class SignalEffect : TrackingSignalNode
             catch (Exception e)
             {
                 Logger.LogError(e,"Failed to schedule: {ErrorMessage}", e.Message);
+
+                lock (_scheduleLock)
+                {
+                    _canSchedule = true;
+
+                    this.Idle();
+                }
             }
         }
     }
-
-    private bool DoRunSync()
-    {
-        var stackInfo = Signals.Options.Logging.CaptureStackInfo?.Invoke(this);
-        
-        try
-        {
-            return this.DoRun().GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                var sigEx = new SignalException("Immediate effect run failed", ex);
-                
-                if (stackInfo is not null && Signals.Options.Logging.AugmentWithStackInfo is not null)
-                {
-                    Signals.Options.Logging.AugmentWithStackInfo(this, sigEx, stackInfo);
-                }
-                
-                throw sigEx;
-            }
-            catch (Exception ex2)
-            {
-                Logger.LogError(ex2, "{ErrorMessage}", ex2.Message);
-            }
-        }
     
-        return false;
+    public void RunImmediate()
+    {
+        this.CheckDisposed();
+
+        this.DoRun().GetAwaiter().GetResult();
     }
     
     private async Task<bool> DoRun()
     {
+        using var activity = this.StartActivity();
+        
         bool shouldReschedule;
         
         var prevTracker = SignalTracker.ReplaceWith(null);
@@ -420,6 +448,11 @@ public class SignalEffect : TrackingSignalNode
             await _runLock.WaitAsync(this.StopToken);
             try
             {
+                if (this.IsDisposing || this.Group.IsDisposing)
+                {
+                    return false;
+                }
+                
                 var swTotal = new Stopwatch();
                 var swRun = new Stopwatch();
 
@@ -435,14 +468,17 @@ public class SignalEffect : TrackingSignalNode
                     do
                     {
                         this.MarkPristine();
-                        
+
                         var tracker = this.StartTrack(true)
                             .Readonly(this.Options.PreventSignalChange)
                             .Recursive()
                             .CollectEffects()
                             .EnableChangeTracking();
+                        
                         try
                         {
+                            activity.Event("Effect run start");
+
                             var shouldMeasureRun = _runTimeLimitMs > 0;
 
                             if (shouldMeasureRun)
@@ -453,7 +489,9 @@ public class SignalEffect : TrackingSignalNode
                             if (shouldMeasureRun)
                                 swRun.Stop();
 
-                            if (!tracker.Effects.IsEmpty)
+                            activity.Event("Effect run end");
+
+                            if (tracker.Effects.HasAny)
                             {
                                 foreach (var effect in tracker.Effects)
                                 {
@@ -464,12 +502,13 @@ public class SignalEffect : TrackingSignalNode
                                     dirtyEffects.Add(effect);
                                 }
                             }
-                            
-                            if (effectResult.ShouldDestroy)
-                            {
-                                return false;
-                            }
 
+                            if (effectResult.ShouldDestroy)
+                                return false;
+
+                            if (effectResult.ShouldReschedule)
+                                return true;
+                            
                             shouldRerun = false;
 
                             foreach (var trackedNode in tracker.Tracked)
@@ -488,7 +527,7 @@ public class SignalEffect : TrackingSignalNode
                                     break;
                                 }
                             }
-                            
+
                             if (!shouldRerun)
                             {
                                 this.MarkPristine();
@@ -496,6 +535,38 @@ public class SignalEffect : TrackingSignalNode
 
                             if (shouldMeasureRun && swRun.ElapsedMilliseconds > _runTimeLimitMs)
                                 break;
+                        }
+                        catch (SignalDeadlockedException)
+                        {
+                            activity.Event("Deadlock raised");
+
+                            shouldRerun = true;
+                        }
+                        catch (SignalDisposedException)
+                        {
+                            activity.Event("Signal disposed error");
+
+                            shouldRerun = !this.IsDisposing;
+                        }
+                        catch (SignalPreemptedException)
+                        {
+                            activity.Event("Signal preempted");
+
+                            tracker.DisableTracking();
+                            this.MarkDirty();
+                            
+                            dirtyEffects?.Clear();
+
+                            return false;
+                        }
+                        catch (Exception ex)
+                        {
+                            activity.Event($"Unexpected signal effect run error: {ex.Message}");
+                            
+                            if (this.IsDisposing)
+                                return false;
+                            
+                            throw;
                         }
                         finally
                         {
@@ -511,7 +582,7 @@ public class SignalEffect : TrackingSignalNode
 
                         if (this.IsDirty && _rerunDelayMs > 0)
                         {
-                            await Task.Delay(_rerunDelayMs, CancellationToken.None);
+                            await Task.Delay(_rerunDelayMs, this.StopToken);
                         }
 
                     } while (this.IsDirty);
@@ -542,7 +613,10 @@ public class SignalEffect : TrackingSignalNode
             {
                 foreach (var effect in dirtyEffects)
                 {
-                    effect.ReScheduleDebounced();
+                    if (!effect.EnqueueAsSuspended())
+                    {
+                        effect.ReScheduleDebounced();
+                    }
                 }
             }
         }
@@ -564,7 +638,7 @@ public class SignalEffect : TrackingSignalNode
 
         try
         {
-            if (this.IsDisposed || this.StopToken.IsCancellationRequested)
+            if (this.IsDisposing || this.StopToken.IsCancellationRequested)
                 return;
 
             shouldReschedule = await this.DoRun();
@@ -593,7 +667,7 @@ public class SignalEffect : TrackingSignalNode
         if (shouldReschedule)
         {
             if (_rescheduleDelayMs > 0)
-                await Task.Delay(_rescheduleDelayMs, CancellationToken.None);
+                await Task.Delay(_rescheduleDelayMs, this.StopToken);
             
             this.Schedule();
 
@@ -602,6 +676,7 @@ public class SignalEffect : TrackingSignalNode
 
         lock (_scheduleLock)
         {
+            _canSchedule = _debounceTimer is null;
             if (_canSchedule)
             {
                 this.Idle();
@@ -669,7 +744,8 @@ public class SignalEffect : TrackingSignalNode
     private bool EnqueueAsSuspended()
     {
         return this.Group.TryQueueSuspended(this)
-            || (SignalGroup.Current?.TryQueueSuspended(this) ?? false);
+            || (SignalGroup.Current?.TryQueueSuspended(this) ?? false)
+            || (SignalGroup.GlobalSuspender?.TryQueueSuspended(this) ?? false);
     }
     
     private static void TimerTick(object? state)
@@ -679,7 +755,7 @@ public class SignalEffect : TrackingSignalNode
         
         effect.CancelTimer();
 
-        if (effect.IsDisposed)
+        if (effect.IsDisposing)
             return;
         
         effect.Schedule(true);

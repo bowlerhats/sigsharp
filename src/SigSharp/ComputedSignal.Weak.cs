@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using SigSharp.Utils;
 
 namespace SigSharp;
 
-public class WeakComputedSignal<T, TState> : ComputedSignal<T>
+public class WeakComputedSignal<[DynamicallyAccessedMembers(
+    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.Interfaces
+    )]T, TState> : ComputedSignal<T>
     where TState: class
 {
     private WeakReference<TState> _state;
@@ -28,15 +31,12 @@ public class WeakComputedSignal<T, TState> : ComputedSignal<T>
         _wrappingFunctor = wrappingFunctor;
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _calcFunctor = default;
-            _wrappingFunctor = default;
-        }
+        _calcFunctor = default;
+        _wrappingFunctor = default;
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
     }
 
     protected override T CalcValueSyncOnly()

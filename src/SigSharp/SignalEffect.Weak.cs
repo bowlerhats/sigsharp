@@ -29,14 +29,11 @@ public sealed class WeakSignalEffect<TState> : SignalEffect
         this.AutoStart();
     }
 
-    protected override void Dispose(bool disposing)
+    protected override ValueTask DisposeAsyncCore()
     {
-        if (disposing)
-        {
-            _stateEffectFunctor = default;
-        }
+        _stateEffectFunctor = default;
         
-        base.Dispose(disposing);
+        return base.DisposeAsyncCore();
     }
     
     protected override async ValueTask<SignalEffectResult> InvokeRunnerFunc()

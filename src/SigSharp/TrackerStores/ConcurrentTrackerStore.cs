@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
 
@@ -7,7 +8,7 @@ namespace SigSharp.TrackerStores;
 
 public sealed class ConcurrentTrackerStore : ITrackerStore
 {
-    public bool HasAny => !_tracked.IsEmpty;
+    public bool HasAny => _tracked.HasAny;
 
     private readonly ConcurrentHashSet<SignalNode> _tracked = [];
     private bool _disposed;
@@ -67,6 +68,28 @@ public sealed class ConcurrentTrackerStore : ITrackerStore
         foreach (var node in _tracked)
         {
             action(state, node);
+        }
+    }
+
+    public async ValueTask WithEachAsync(Func<SignalNode, ValueTask> action)
+    {
+        if (_tracked.IsEmpty)
+            return;
+        
+        foreach (var node in _tracked)
+        {
+            await action(node);
+        }
+    }
+    
+    public async ValueTask WithEachAsync<TState>(TState state, Func<TState, SignalNode, ValueTask> action)
+    {
+        if (_tracked.IsEmpty)
+            return;
+        
+        foreach (var node in _tracked)
+        {
+            await action(state, node);
         }
     }
 

@@ -21,44 +21,44 @@ public class ComputationAccessBenchmarks
         _init = _calc.ByComputed + _calc.ByProperty;
     }
 
-    [Benchmark]
-    public void Access_AsyncLocal()
-    {
-        // To prove that majority of allocations are done by asynclocal, and not the lib
-        for (var i = 0; i < AccessIterations; i++)
-        {
-            _asyncLocal.Value = _list;
-            _asyncLocal.Value = null!;
-        }
-    }
-    
-    [Benchmark]
-    public void AccessByProperty_JustRead()
-    {
-        for (var i = 0; i < AccessIterations; i++)
-        {
-            _init = Math.Min(2, _calc.ByProperty);
-        }
-    }
-    
-    [Benchmark]
-    public void AccessByComputed_JustRead()
-    {
-        for (var i = 0; i < AccessIterations; i++)
-        {
-            _init = Math.Min(2, _calc.ByComputed);
-        }
-    }
-    
-    [Benchmark]
-    public void AccessByComputed_WithMutation()
-    {
-        for (var i = 0; i < AccessIterations; i++)
-        {
-            _calc.Signal.Value += _init;
-            _init = Math.Min(2, _calc.ByComputed);
-        }
-    }
+    // [Benchmark]
+    // public void Access_AsyncLocal()
+    // {
+    //     // To prove that majority of allocations are done by asynclocal, and not the lib
+    //     for (var i = 0; i < AccessIterations; i++)
+    //     {
+    //         _asyncLocal.Value = _list;
+    //         _asyncLocal.Value = null!;
+    //     }
+    // }
+    //
+    // [Benchmark]
+    // public void AccessByProperty_JustRead()
+    // {
+    //     for (var i = 0; i < AccessIterations; i++)
+    //     {
+    //         _init = Math.Min(2, _calc.ByProperty);
+    //     }
+    // }
+    //
+    // [Benchmark]
+    // public void AccessByComputed_JustRead()
+    // {
+    //     for (var i = 0; i < AccessIterations; i++)
+    //     {
+    //         _init = Math.Min(2, _calc.ByComputed);
+    //     }
+    // }
+    //
+    // [Benchmark]
+    // public void AccessByComputed_WithMutation()
+    // {
+    //     for (var i = 0; i < AccessIterations; i++)
+    //     {
+    //         _calc.Signal.Value += _init;
+    //         _init = Math.Min(2, _calc.ByComputed);
+    //     }
+    // }
     
     [Benchmark]
     public void AccessByProperty_WithMutation()
@@ -77,8 +77,12 @@ public class ComputationAccessBenchmarks
         
         public int ByProperty => this.Signal.Value;
         
-        public int ByComputed => this.Group.Computed(this, static c => c.Signal.Value);
+        public int ByComputed => this.Group.Computed(this, static c => c.Signal.Value
+            //, opts => opts with { AccessStrategy = SignalAccessStrategy.Unrestricted }
+            );
+        //public int ByComputed => this.Group.Computed(this, static c => c.Signal.Value, ComputedSignalOptions.Defaults with{ AccessStrategy = SignalAccessStrategy.PreemptiveLock });
         
-        public Signal<int> Signal { get; } = new(1);
+        public Signal<int> Signal { get; } = new(1, SignalOptions.Defaults with { AccessStrategy = SignalAccessStrategy.Unrestricted });
+        //public Signal<int> Signal { get; } = new(1, SignalOptions.Defaults with { AccessStrategy = SignalAccessStrategy.PreemptiveLock });
     }
 }

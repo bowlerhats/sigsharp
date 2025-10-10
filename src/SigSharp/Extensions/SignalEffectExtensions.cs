@@ -1,17 +1,27 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+// ReSharper disable ExplicitCallerInfoArgument
 
 namespace SigSharp;
 
 public static class SignalEffectExtensions
 {
+    private static string ComposeName<TAnchor>(string? cm, int lineNumber, string? cexp, SignalGroup group, TAnchor anchor)
+    {
+        return $"{Signals.ComposeName(cm, lineNumber, cexp, group)} | for '{anchor?.GetType().Name ?? typeof(TAnchor).Name}'";
+    }
+    
     public static SignalEffect Effect<TAnchor>(
         this TAnchor anchor,
         Action func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -20,7 +30,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
 
-        return Signals.Effect(func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+
+        return Signals.Effect(func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -28,7 +40,10 @@ public static class SignalEffectExtensions
         Func<SignalEffectResult> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -37,7 +52,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -45,7 +62,10 @@ public static class SignalEffectExtensions
         Func<ValueTask> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
     {
@@ -54,7 +74,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -62,7 +84,10 @@ public static class SignalEffectExtensions
         Func<ValueTask<SignalEffectResult>> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -71,7 +96,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -79,7 +106,10 @@ public static class SignalEffectExtensions
         Func<TAnchor, ValueTask> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
     {
@@ -88,7 +118,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -96,7 +128,10 @@ public static class SignalEffectExtensions
         Func<TAnchor, ValueTask<SignalEffectResult>> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -105,7 +140,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -113,7 +150,10 @@ public static class SignalEffectExtensions
         Action<TAnchor> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
     {
@@ -122,7 +162,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor>(
@@ -130,7 +172,10 @@ public static class SignalEffectExtensions
         Func<TAnchor, SignalEffectResult> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -139,7 +184,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(anchor, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor, TState>(
@@ -148,7 +195,10 @@ public static class SignalEffectExtensions
         Func<TState, ValueTask> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
     {
@@ -157,7 +207,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor, TState>(
@@ -166,7 +218,10 @@ public static class SignalEffectExtensions
         Func<TState, ValueTask<SignalEffectResult>> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -175,7 +230,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor, TState>(
@@ -184,7 +241,10 @@ public static class SignalEffectExtensions
         Action<TState> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
     {
@@ -193,7 +253,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect Effect<TAnchor, TState>(
@@ -202,7 +264,10 @@ public static class SignalEffectExtensions
         Func<TState, SignalEffectResult> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
     {
@@ -211,7 +276,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.Effect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.Effect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect WeakEffect<TAnchor, TState>(
@@ -220,7 +287,10 @@ public static class SignalEffectExtensions
         Func<TState, ValueTask> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
         where TState: class
@@ -230,7 +300,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect WeakEffect<TAnchor, TState>(
@@ -239,7 +311,10 @@ public static class SignalEffectExtensions
         Func<TState, ValueTask<SignalEffectResult>> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
         where TState: class
@@ -249,7 +324,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect WeakEffect<TAnchor, TState>(
@@ -258,7 +335,10 @@ public static class SignalEffectExtensions
         Action<TState> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
         )
         where TAnchor: class
         where TState: class
@@ -268,7 +348,9 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
     
     public static SignalEffect WeakEffect<TAnchor, TState>(
@@ -277,7 +359,10 @@ public static class SignalEffectExtensions
         Func<TState, SignalEffectResult> func,
         SignalEffectOptions? effectOptions = null,
         string? name = null,
-        CancellationToken stopToken = default
+        CancellationToken stopToken = default,
+        [CallerMemberName] string? cm = null,
+        [CallerLineNumber] int lineNumber = 0,
+        [CallerArgumentExpression(nameof(func))]string? cexp = null
     )
         where TAnchor: class
         where TState: class
@@ -287,6 +372,8 @@ public static class SignalEffectExtensions
         
         var group = SignalGroup.Of(anchor, SignalGroupOptions.Defaults);
         
-        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken);
+        name ??= ComposeName(cm, lineNumber, cexp, group, anchor);
+        
+        return Signals.WeakEffect(state, func, group, effectOptions, name, stopToken, cm, lineNumber, cexp);
     }
 }
