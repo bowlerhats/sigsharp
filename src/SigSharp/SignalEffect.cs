@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SigSharp.Nodes;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp;
 
@@ -78,6 +80,8 @@ public class SignalEffect : TrackingSignalNode
             this.AutoStart();
         
         _tokenRegistration = stopToken.Register(this.StopAutoRun);
+        
+        Perf.Increment("signal.effect.count");
     }
 
     protected override async ValueTask DisposeAsyncCore()
@@ -114,6 +118,8 @@ public class SignalEffect : TrackingSignalNode
             
             rLock.Dispose();
         }
+        
+        Perf.Decrement("signal.effect.count");
 
         await base.DisposeAsyncCore();
     }
@@ -254,6 +260,9 @@ public class SignalEffect : TrackingSignalNode
         
         if (_idle.IsSet)
             return false;
+
+        if (SignalTracker.Current?.IsInEffect(this) ?? false)
+            return false;
         
         stopToken = stopToken.HasValue
             ? CancellationTokenSource.CreateLinkedTokenSource(this.StopToken, stopToken.Value).Token
@@ -265,7 +274,10 @@ public class SignalEffect : TrackingSignalNode
         }
         else
         {
-            await _idle.WaitAsync(stopToken: stopToken.Value);
+            while (!await _idle.WaitAsync(TimeSpan.FromSeconds(1), stopToken.Value))
+            {
+                
+            }
         }
 
         return true;
@@ -432,7 +444,7 @@ public class SignalEffect : TrackingSignalNode
     private async Task<bool> DoRun()
     {
         using var activity = this.StartActivity();
-        
+
         bool shouldReschedule;
         
         var prevTracker = SignalTracker.ReplaceWith(null);
@@ -467,6 +479,8 @@ public class SignalEffect : TrackingSignalNode
 
                     do
                     {
+                        using var runTime = Perf.MeasureTime(this, "signal.effect.run");
+                        
                         this.MarkPristine();
 
                         var tracker = this.StartTrack(true)
@@ -474,7 +488,7 @@ public class SignalEffect : TrackingSignalNode
                             .Recursive()
                             .CollectEffects()
                             .EnableChangeTracking();
-                        
+
                         try
                         {
                             activity.Event("Effect run start");
@@ -508,7 +522,7 @@ public class SignalEffect : TrackingSignalNode
 
                             if (effectResult.ShouldReschedule)
                                 return true;
-                            
+
                             shouldRerun = false;
 
                             foreach (var trackedNode in tracker.Tracked)
@@ -536,31 +550,51 @@ public class SignalEffect : TrackingSignalNode
                             if (shouldMeasureRun && swRun.ElapsedMilliseconds > _runTimeLimitMs)
                                 break;
                         }
+                        catch (SignalVersionChangedException)
+                        {
+                            Perf.MonoIncrement(this, "signal.effect.run.errors.versionchanged");
+                            activity.Event("VersionChanged raised");
+                            
+                            tracker.DisableTracking();
+                            this.MarkDirty();
+                            
+                            dirtyEffects?.Clear();
+
+                            return !this.IsDisposing;
+                        }
                         catch (SignalDeadlockedException)
                         {
+                            Perf.MonoIncrement(this, "signal.effect.run.errors.deadlocks");
+                            
                             activity.Event("Deadlock raised");
 
-                            shouldRerun = true;
+                            return !this.IsDisposing;
                         }
                         catch (SignalDisposedException)
                         {
+                            Perf.MonoIncrement(this, "signal.effect.run.errors.disposed");
+                            
                             activity.Event("Signal disposed error");
 
-                            shouldRerun = !this.IsDisposing;
+                            return !this.IsDisposing;
                         }
-                        catch (SignalPreemptedException)
+                        catch (SignalPreemptedException preemptException)
                         {
+                            Perf.MonoIncrement(this, "signal.effect.run.errors.preemptions");
+                            
                             activity.Event("Signal preempted");
 
                             tracker.DisableTracking();
                             this.MarkDirty();
                             
                             dirtyEffects?.Clear();
-
-                            return false;
+                            
+                            return !this.IsDisposing && !preemptException.IsRescheduled;
                         }
                         catch (Exception ex)
                         {
+                            Perf.MonoIncrement(this, "signal.effect.run.errors.unexpected");
+                            
                             activity.Event($"Unexpected signal effect run error: {ex.Message}");
                             
                             if (this.IsDisposing)
@@ -611,7 +645,7 @@ public class SignalEffect : TrackingSignalNode
 
             if (dirtyEffects is not null)
             {
-                foreach (var effect in dirtyEffects)
+                foreach (var effect in dirtyEffects.OrderBy(d => d.NodeId))
                 {
                     if (!effect.EnqueueAsSuspended())
                     {

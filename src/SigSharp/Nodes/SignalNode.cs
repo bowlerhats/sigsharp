@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp.Nodes;
 
@@ -81,6 +82,8 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
         
         this.MarkTracked();
         this.RequestAccess();
+        
+        Perf.Increment("signal.node.count");
     }
 
     protected virtual ValueTask DisposeAsyncCore()
@@ -102,6 +105,8 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
         this.AccessLatch = null;
         this.AccessLock?.Dispose();
         this.AccessLock = null;
+        
+        Perf.Decrement("signal.node.count");
         
         return ValueTask.CompletedTask;
     }
@@ -165,7 +170,9 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
         
         switch (accessStrategy)
         {
-            case SignalAccessStrategy.Unrestricted:    break;
+            case SignalAccessStrategy.Optimistic:
+            case SignalAccessStrategy.Unrestricted:
+                break;
             case SignalAccessStrategy.ExclusiveLock:
                 this.AccessLock = new SemaphoreSlim(1);
                 break;

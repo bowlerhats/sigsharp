@@ -14,14 +14,10 @@ public static partial class Signals
             try
             {
                 await Detached(action);
-                
+
                 break;
             }
-            catch (SignalDeadlockedException)
-            {
-                // ignore
-            }
-            catch (SignalPreemptedException)
+            catch (SignalException)
             {
                 // ignore
             }

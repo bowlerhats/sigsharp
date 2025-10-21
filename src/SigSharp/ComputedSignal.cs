@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp;
 
@@ -54,6 +55,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
         this.DefaultValue = this.Options.DefaultValueProvider.GetDefaultValue<T>(default);
 
         _value = this.DefaultValue!;
+        
+        Perf.Increment("signal.computed.count");
     }
 
     protected override ValueTask DisposeAsyncCore()
@@ -68,6 +71,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
         _disposedCapture = DisposedSignalAccess.Capture(_value, this.DefaultValue!, this, this.Options.DisposedAccessStrategy);
         
         _value = default!;
+        
+        Perf.Decrement("signal.computed.count");
         
         return base.DisposeAsyncCore();
     }
@@ -84,6 +89,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
 
     public T GetUntracked()
     {
+        Perf.MonoIncrement(this, "signal.computed.reads.untracked");
+        
         return Signals.Untracked(this.Get);
     }
 
@@ -95,12 +102,18 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
         if (this.IsDisposing || this.Group.IsDisposing)
             return this.DefaultValue!;
         
+        Perf.MonoIncrement(this, "signal.computed.reads.all");
+        
         this.MarkTracked();
         this.RequestAccess();
-        
+
         if (!this.IsDirty && this.HasTracking)
+        {
+            Perf.MonoIncrement(this, "signal.computed.reads.cached");
+            
             return _value;
-        
+        }
+
         return this.Update();
     }
 
@@ -130,6 +143,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
         using var activity = this.StartActivity();
         
         this.CheckDisposed();
+
+        using var updateCount = Perf.Count(this, "signal.computed.active_updates");
         
         if (this.IsDisposed)
             return DisposedSignalAccess.Access(_disposedCapture, this);
@@ -148,6 +163,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
         if (!_updateLock.Wait(TimeSpan.FromMilliseconds(5)))
         {
             wasWaiting = true;
+
+            using var waiting = Perf.MeasureTime(this, "signal.wait.computed.update_lock");
             
             while (!await _updateLock.WaitAsync(TimeSpan.FromSeconds(1)))
             {
@@ -179,9 +196,12 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
             if (!wasWaiting || this.IsDirty)
             {
                 const int maxRecalc = 50;
+                var versionChangedCount = 0;
                 var recalc = 0;
                 do
                 {
+                    using var updateRun = Perf.MeasureTime(this, "signal.computed.run");
+                    
                     this.IsShadowDirty = false;
                     
                     var tracker = this.StartTrack(false).Readonly();
@@ -193,8 +213,32 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
 
                         _value ??= this.DefaultValue ?? default!;
                     }
+                    catch (SignalVersionChangedException vcException)
+                    {
+                        tracker.DisableTracking();
+                        
+                        if (this.IsDisposing || this.Group.IsDisposing)
+                        {
+                            return DisposedSignalAccess.Access(_disposedCapture, this);
+                        }
+                        
+                        // not touched yet
+                        if (!tracker.Versions.ContainsKey(vcException.Node))
+                            throw;
+
+                        this.IsShadowDirty = true;
+
+                        var backoffMs = Math.Min(5, versionChangedCount++) * 20;
+                        if (backoffMs > 0)
+                        {
+                            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs));
+                        }
+                        
+                    }
                     catch (SignalDeadlockedException)
                     {
+                        Perf.MonoIncrement(this, "signal.computed.errors.deadlocks");
+                        
                         if (this.IsDisposing || this.Group.IsDisposing)
                         {
                             return DisposedSignalAccess.Access(_disposedCapture, this);
@@ -207,6 +251,8 @@ public class ComputedSignal<[DynamicallyAccessedMembers(
                     }
                     catch (SignalPreemptedException)
                     {
+                        Perf.MonoIncrement(this, "signal.computed.errors.preemptions");
+                        
                         tracker.DisableTracking();
                         
                         if (this.IsDisposing || this.Group.IsDisposing)

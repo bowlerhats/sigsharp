@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp.Nodes;
 
@@ -30,6 +31,8 @@ internal sealed partial class SignalTracker
     internal SignalTracker Root => _parent?.Root ?? this;
     
     internal bool IsRoot => this.Root == this;
+    
+    private SignalEffect? RootEffect => this.Root._contextNode as SignalEffect;
     
     private static long _trackerIdCount = 1;
     private long _trackerId = 1;
@@ -175,6 +178,8 @@ internal sealed partial class SignalTracker
         if (node.AccessStrategy == SignalAccessStrategy.Unrestricted)
             return;
         
+        Perf.MonoIncrement(node, "signal.tracker.access.requests.all");
+        
         if (this.HoldsLock(node, true))
             return;
         
@@ -184,13 +189,20 @@ internal sealed partial class SignalTracker
                 return;
             
             case SignalAccessStrategy.ExclusiveLock:
+                Perf.MonoIncrement(node, "signal.tracker.access.requests.exclusive_locks");
                 
                 this.ExclusiveLock(node);
                 break;
             
             case SignalAccessStrategy.PreemptiveLock:
+                Perf.MonoIncrement(node, "signal.tracker.access.requests.preemptive_locks");
                 
                 this.PreEmptiveAccess(node);
+                break;
+            case SignalAccessStrategy.Optimistic:
+                Perf.MonoIncrement(node, "signal.tracker.access.requests.optimistic");
+                
+                this.OptimisticAccess(node);
                 break;
             default:                                   throw new ArgumentOutOfRangeException();
         }
@@ -201,6 +213,8 @@ internal sealed partial class SignalTracker
         if (node.AccessStrategy == SignalAccessStrategy.Unrestricted)
             return;
         
+        Perf.MonoIncrement(node, "signal.tracker.update.requests.all");
+        
         if (this.HoldsLock(node, true))
             return;
         
@@ -210,13 +224,20 @@ internal sealed partial class SignalTracker
                 return;
             
             case SignalAccessStrategy.ExclusiveLock:
+                Perf.MonoIncrement(node, "signal.tracker.update.requests.exclusive_locks");
                 
                 this.ExclusiveLock(node);
                 break;
             
             case SignalAccessStrategy.PreemptiveLock:
-
+                Perf.MonoIncrement(node, "signal.tracker.update.requests.preemptive_locks");
+                
                 this.PreEmptiveUpdate(node);
+                break;
+            case SignalAccessStrategy.Optimistic:
+                Perf.MonoIncrement(node, "signal.tracker.update.requests.optimistic");
+                
+                this.OptimisticUpdate(node);
                 break;
             default:                                   throw new ArgumentOutOfRangeException();
         }
@@ -306,12 +327,21 @@ internal sealed partial class SignalTracker
         }
     }
 
-    internal bool IsInEffect()
+    internal bool IsInEffect(SignalEffect? searchEffect = null)
     {
+        var isSearching = searchEffect is not null;
+
         foreach (var tracker in ObjectWalker.Walk(this, static d => d._parent))
         {
-            if (tracker._contextNode is SignalEffect)
+            if (!isSearching)
+            {
+                if (tracker._contextNode is SignalEffect)
+                    return true;
+            }
+            else if (searchEffect == tracker._contextNode)
+            {
                 return true;
+            }
         }
 
         return false;
@@ -342,12 +372,38 @@ internal sealed partial class SignalTracker
         return false;
     }
 
+    private void OptimisticAccess(SignalNode node)
+    {
+        this.CheckVersion(node);
+    }
+
+    private void OptimisticUpdate(SignalNode node)
+    {
+        lock (node.RequestLock)
+        {
+            if (!node.IsDirty)
+            {
+                this.CheckVersion(node);
+                return;
+            }
+
+            if (node.LockedBy.HasAny)
+            {
+                this.YieldWhenYoungerThan(node);
+
+                throw new SignalDeadlockedException(node);
+            }
+
+            this.RegisterLock(node);
+        }
+    }
+    
     private void PreEmptiveAccess(SignalNode node)
     {
         var accessLatch = node.AccessLatch;
         if (accessLatch is null)
             return;
-        
+
         if (this.HasLatched(node))
         {
             this.YieldWhenYoungerThan(node);
@@ -356,26 +412,40 @@ internal sealed partial class SignalTracker
             
             return;
         }
-
+        
         if (!accessLatch.Acquire(this.Root, TimeSpan.FromMilliseconds(10)))
         {
             if (node.IsDisposing)
                 return;
 
+            using var waitMeasure = Perf.MeasureTime(node, "signal.wait.access.acquire_latch");
+            
             try
             {
                 node.Waiters.Add(this);
                 this.Waited.Add(node);
 
-                while (!accessLatch.Acquire(this.Root, TimeSpan.FromSeconds(1)))
+                while (!accessLatch.Acquire(this.Root, TimeSpan.FromMilliseconds(300)))
                 {
                     if (node.IsDisposing)
                         return;
-
+                    
+                    if (accessLatch.ClosedBy == this.Root)
+                        return;
+                    
                     if (this.HoldsLock(node, true))
                         return;
                     
                     this.YieldWhenYoungerThan(node);
+                    
+                    lock (node.RequestLock)
+                    {
+                        if (accessLatch.IsGateClosed)
+                        {
+                            
+                            this.Preempt(node, accessLatch.ClosedBy);
+                        }
+                    }
 
                     if (this.IsDeadlocked(node))
                     {
@@ -393,6 +463,73 @@ internal sealed partial class SignalTracker
         this.Root.Latched.Add(node);
 
         this.CheckVersion(node);
+    }
+    
+    private void PreEmptiveUpdate(SignalNode node)
+    {
+        var accessLatch = node.AccessLatch;
+        if (accessLatch is null)
+            return;
+
+        this.YieldWhenYoungerThan(node);
+
+        lock (node.RequestLock)
+        {
+            if (accessLatch.IsGateClosed)
+            {
+                if (accessLatch.ClosedBy != this.Root)
+                {
+                    this.Preempt(node, accessLatch.ClosedBy);
+                }
+            }
+
+            accessLatch.CloseGate(this.Root);
+
+            if (accessLatch.ClosedBy != this.Root)
+            {
+                this.Preempt(node, accessLatch.ClosedBy);
+            }
+            
+        }
+
+        var wasLatching = accessLatch.HasLatch(this.Root);
+        if (wasLatching)
+            accessLatch.Release(this.Root);
+
+        if (!accessLatch.Wait(TimeSpan.FromMilliseconds(20)))
+        {
+            this.YieldWhenYoungerThan(node);
+            
+            using var waitMeasure = Perf.MeasureTime(node, "signal.wait.update.wait_latch");
+
+            try
+            {
+                node.Waiters.Add(this);
+                this.Waited.Add(node);
+
+                while (!accessLatch.Wait(TimeSpan.FromMilliseconds(300)))
+                {
+                    if (node.IsDisposing || this.HoldsLock(node, true))
+                    {
+                        return;
+                    }
+                    
+                    this.YieldWhenYoungerThan(node);
+
+                    if (this.IsDeadlocked(node))
+                    {
+                        throw new SignalDeadlockedException(node);
+                    }
+                }
+            }
+            finally
+            {
+                node.Waiters.Remove(this);
+                this.Waited.Remove(node);
+            }
+        }
+
+        this.RegisterLock(node);
     }
 
     private void YieldWhenYoungerThan(SignalNode node)
@@ -418,20 +555,33 @@ internal sealed partial class SignalTracker
 
         if (minLocker is { AcceptEffects: true } && minLocker._trackerId < _trackerId)
         {
-            if (this.Root._contextNode is SignalEffect myRootEffect)
-                minLocker.PostEffect(myRootEffect);
-            
-            throw new SignalPreemptedException(node);
+            this.Preempt(node, minLocker);
         }
+    }
+
+    private void Preempt(SignalNode node, SignalTracker? scheduleTarget)
+    {
+        if (this.RootEffect is not null && scheduleTarget is not null)
+        {
+            scheduleTarget.PostEffect(this.RootEffect);
+                
+            throw new SignalPreemptedException(node) { IsRescheduled = true };
+        }
+
+        throw new SignalPreemptedException(node);
     }
 
     private void CheckVersion(SignalNode node)
     {
+        // Order of checks is important!
+        if (!this.IsRoot)
+            this.Root.CheckVersion(node);
+        
         var lockTaken = false;
         try
         {
             _versionsLock.Enter(ref lockTaken);
-
+            
             if (!this.Versions.TryGetValue(node, out var version))
             {
                 version = node.Version;
@@ -440,7 +590,7 @@ internal sealed partial class SignalTracker
             
             if (version != node.Version)
             {
-                throw new SignalUnexpectedlyChangedException(version, node.Version);
+                throw new SignalVersionChangedException(node, version, node.Version);
             }
         }
         finally
@@ -450,60 +600,6 @@ internal sealed partial class SignalTracker
                 _versionsLock.Exit(false);
             }
         }
-    }
-
-    private void PreEmptiveUpdate(SignalNode node)
-    {
-        var accessLatch = node.AccessLatch;
-        if (accessLatch is null)
-            return;
-
-        this.YieldWhenYoungerThan(node);
-
-        lock (node.RequestLock)
-        {
-            if (accessLatch.IsGateClosed)
-                throw new SignalPreemptedException(node);
-            
-            accessLatch.CloseGate();
-        }
-
-        var wasLatching = accessLatch.HasLatch(this.Root);
-        if (wasLatching)
-            accessLatch.Release(this.Root);
-
-        if (!accessLatch.Wait(TimeSpan.FromMilliseconds(20)))
-        {
-            this.YieldWhenYoungerThan(node);
-                
-            try
-            {
-                node.Waiters.Add(this);
-                this.Waited.Add(node);
-
-                while (!accessLatch.Wait(TimeSpan.FromMilliseconds(300)))
-                {
-                    if (node.IsDisposing || this.HoldsLock(node, true))
-                    {
-                        return;
-                    }
-                        
-                    this.YieldWhenYoungerThan(node);
-
-                    if (this.IsDeadlocked(node))
-                    {
-                        throw new SignalDeadlockedException(node);
-                    }
-                }
-            }
-            finally
-            {
-                node.Waiters.Remove(this);
-                this.Waited.Remove(node);
-            }
-        }
-
-        this.RegisterLock(node);
     }
 
     private bool HasLatched(SignalNode node)
@@ -613,12 +709,13 @@ internal sealed partial class SignalTracker
                 {
                     switch (node.AccessStrategy)
                     {
+                        case SignalAccessStrategy.Optimistic:
                         case SignalAccessStrategy.Unrestricted: break;
                         case SignalAccessStrategy.ExclusiveLock:
                             node.AccessLock?.Release();
                             break;
                         case SignalAccessStrategy.PreemptiveLock:
-                            node.AccessLatch?.ReleaseGate();
+                            node.AccessLatch?.ReleaseGate(this.Root);
                             break;
                         default: throw new ArgumentOutOfRangeException();
                     }

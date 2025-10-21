@@ -1,13 +1,17 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp;
 
 public static partial class Signals
 {
+    public static bool IsGloballySuspended => SignalGroup.GlobalSuspender is not null;
+    
     /// <summary>
     /// Global options for signal handling
     /// </summary>
@@ -17,14 +21,16 @@ public static partial class Signals
     {
         return SignalGroup.CreateSuspended();
     }
-
+    
     public static SignalSuspender GlobalSuspend()
     {
         return SignalGroup.CreateGlobalSuspended();
     }
 
-    public static async Task<bool> WaitIdleAsync(TimeSpan? waitBetweenChecks = null)
+    public static async Task<bool> WaitIdleAsync(TimeSpan? waitBetweenChecks = null, CancellationToken stopToken = default)
     {
+        using var waitMeasure = Perf.MeasureTime("signal.wait.global_idle");
+        
         waitBetweenChecks ??= TimeSpan.FromMilliseconds(50);
 
         var currentGroup = SignalGroup.Current;
@@ -48,7 +54,7 @@ public static partial class Signals
                 if (SignalGroup.GlobalSuspender?.HasBound(group) ?? false)
                     continue; // Same for global suspender
                 
-                if (await group.WaitIdleAsync())
+                if (await group.WaitIdleAsync(stopToken: stopToken))
                 {
                     isWorking = true;
                     wasWorking = true;
@@ -59,7 +65,7 @@ public static partial class Signals
 
             if (isWorking)
             {
-                await Task.Delay(waitBetweenChecks.Value);
+                await Task.Delay(waitBetweenChecks.Value, stopToken);
             }
 
         } while (isWorking);

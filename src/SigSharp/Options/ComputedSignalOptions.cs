@@ -12,7 +12,7 @@ public record ComputedSignalOptions
         = DisposedSignalAccess.Strategy.LastScalarOrDefault;
     
     public SignalAccessStrategy AccessStrategy { get; init; }
-        = SignalAccessStrategy.PreemptiveLock;
+        = SignalAccessStrategy.Optimistic;
     
     public SignalDefaultValueProvider DefaultValueProvider { get; init; }
         = SignalDefaultValueProvider.DefaultInstance;

@@ -397,6 +397,7 @@ public sealed partial class SignalGroup: SignalNode
         bound ??= GlobalSuspender;
         
         HashSet<SignalEffect> scheduled = [];
+        PriorityQueue<SignalEffect, ulong> toSchedule = new(_queued.Count);
         
         while (_queued.TryDequeue(out var effect))
         {
@@ -412,9 +413,14 @@ public sealed partial class SignalGroup: SignalNode
                         continue;
                     }
                     
-                    effect.Schedule(true);
+                    toSchedule.Enqueue(effect, effect.NodeId);
                 }
             }
+        }
+
+        while (toSchedule.TryDequeue(out var effect, out var _))
+        {
+            effect.Schedule(true);
         }
     }
 }

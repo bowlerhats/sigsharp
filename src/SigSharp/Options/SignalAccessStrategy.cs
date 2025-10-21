@@ -4,5 +4,6 @@ public enum SignalAccessStrategy
 {
     Unrestricted,
     ExclusiveLock,
-    PreemptiveLock
+    PreemptiveLock,
+    Optimistic
 }

@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SigSharp.Nodes;
-using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp;
 
@@ -55,6 +55,11 @@ public sealed partial class GlobalSignalOptions
         /// </summary>
         public ISignalTraceProvider? TraceProvider { get; init; }
             = Perf.DefaultTraceProvider;
+        
+        public bool MetricsEnabled { get; init; }
+
+        public ISignalMetricsProvider? MetricsProvider { get; init; }
+            = Perf.DefaultMetricsProvider;
         
         public ILogger CreateLogger(Type type)
         {

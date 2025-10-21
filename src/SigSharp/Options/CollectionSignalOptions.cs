@@ -8,5 +8,5 @@ public record CollectionSignalOptions
         = DisposedSignalAccess.Strategy.LastScalarOrDefault;
     
     public SignalAccessStrategy AccessStrategy { get; init; }
-        = SignalAccessStrategy.PreemptiveLock;
+        = SignalAccessStrategy.Unrestricted;
 }

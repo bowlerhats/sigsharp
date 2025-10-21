@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using SigSharp.Utils;
+using SigSharp.Utils.Perf;
 
 namespace SigSharp.Nodes;
 
@@ -28,6 +29,8 @@ internal partial class SignalTracker
         var tracker = TrackerPool.Rent().Init(contextNode, parent);
 
         CurrentTracker.Value = tracker;
+        
+        Perf.Increment("signal.tracker.active_count");
 
         return tracker;
     }
@@ -43,6 +46,8 @@ internal partial class SignalTracker
 
             TrackerPool.Return(tracker);
         }
+        
+        Perf.Decrement("signal.tracker.active_count");
 
         if (tracker != expected)
             throw new ArgumentOutOfRangeException(nameof(expected), "Popped tracker is not the expected one");

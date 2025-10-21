@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using SigSharp.Nodes;
 
 namespace SigSharp.Utils;
 
@@ -8,6 +9,7 @@ internal sealed class GatedLatch<T>: IDisposable
     where T : notnull
 {
     public bool IsGateClosed => !_gate.IsSet;
+    public SignalTracker? ClosedBy => _closedBy;
     
     private readonly ManualResetEventSlim _gate = new(true);
     private readonly ManualResetEventSlim _latch = new(true);
@@ -17,6 +19,7 @@ internal sealed class GatedLatch<T>: IDisposable
     private readonly HashSet<T> _latches = new(32);
     
     private bool _disposed;
+    private SignalTracker? _closedBy;
     
     public void Dispose()
     {
@@ -98,18 +101,30 @@ internal sealed class GatedLatch<T>: IDisposable
         }
     }
 
-    public void CloseGate()
+    public void CloseGate(SignalTracker closer)
     {
         this.CheckDisposed();
-        
-        _gate.Reset();
+
+        Interlocked.CompareExchange(ref _closedBy, closer, null);
+        if (_closedBy == closer)
+        {
+            _gate.Reset();
+        }
     }
 
-    public void ReleaseGate()
+    public void ReleaseGate(SignalTracker expectedCloser)
     {
         this.CheckDisposed();
-        
-        _gate.Set();
+
+        Interlocked.CompareExchange(ref _closedBy, null, expectedCloser);
+        if (_closedBy is null)
+        {
+            _gate.Set();
+        }
+        else
+        {
+            throw new SignalException("Unexpected gate release");
+        }
     }
     
     public bool Wait(TimeSpan timeout)
