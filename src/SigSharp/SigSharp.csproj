@@ -14,7 +14,7 @@
     <Version>0.0.1-alpha</Version>
     <Title>SigSharp</Title>
     <Product>SigSharp</Product>
-    <Copyright>Copyright © 2025 SigSharp Contributors</Copyright>
+    <Copyright>Copyright © 2026 SigSharp Contributors</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
 
     <Description>SigSharp is a computational dependency helper inspired by Angular signals.</Description>
