@@ -282,7 +282,13 @@ internal sealed partial class SignalTracker
         }
 
         if (!this.WaitAccess(node, TimeSpan.FromSeconds(1)))
+        {
+            this.YieldWhenYoungerThan(node);
+            
+            this.Preempt(node, null);
+            
             return;
+        }
         
         this.RegisterLock(node);
     }
@@ -609,7 +615,7 @@ internal sealed partial class SignalTracker
 
     internal bool HoldsLock(SignalNode node, bool recursive = false)
     {
-        if (!recursive)
+        if (!recursive || this.IsRoot)
             return this.Locked.Contains(node);
 
         foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
@@ -623,7 +629,7 @@ internal sealed partial class SignalTracker
 
     public bool HasTracked(SignalNode node, bool recursive = false)
     {
-        if (!recursive)
+        if (!recursive || this.IsRoot)
             return this.Tracked.Contains(node);
 
         foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))

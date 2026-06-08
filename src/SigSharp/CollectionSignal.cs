@@ -1,5 +1,7 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using SigSharp.Nodes;
 using SigSharp.Utils;
@@ -13,6 +15,13 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     {
         get
         {
+            if (this.IsDisposed)
+            {
+                return DisposedSignalAccess
+                    .Access(this.DisposedCapture, this)
+                    .Count;
+            }
+            
             this.MarkTracked();
             this.RequestAccess();
             
@@ -24,6 +33,13 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     {
         get
         {
+            if (this.IsDisposed)
+            {
+                return DisposedSignalAccess
+                    .Access(this.DisposedCapture, this)
+                    .IsReadOnly;
+            }
+            
             this.MarkTracked();
             this.RequestAccess();
             
@@ -35,7 +51,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     
     protected TCollection BackingCollection { get; private set; }
 
-    private DisposedSignalAccess.DisposedCapture<TCollection> _disposedCapture;
+    protected DisposedSignalAccess.DisposedCapture<TCollection> DisposedCapture { get; set; }
     
     protected CollectionSignal(
         IEnumerable<T> initialValues,
@@ -44,6 +60,9 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         ) : base(true, false, name ?? $"CollectionSignal<{typeof(T).Name}, {typeof(TCollection).Name}>")
     {
         this.Options = opts ?? CollectionSignalOptions.Defaults;
+
+        if (this.Options.AccessStrategy == SignalAccessStrategy.Optimistic)
+            throw new NotSupportedException("Optimistic strategy should not be used with collection signals");
 
         this.SetAccessStrategy(this.Options.AccessStrategy);
         
@@ -63,7 +82,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
                 _   => default!
             };
 
-        _disposedCapture = DisposedSignalAccess.Capture(
+        this.DisposedCapture = DisposedSignalAccess.Capture(
             this.BackingCollection,
             emptyCollection,
             this,
@@ -89,7 +108,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         if (this.IsDisposed)
         {
             return DisposedSignalAccess
-                .Access(_disposedCapture, this)
+                .Access(this.DisposedCapture, this)
                 .GetEnumerator();
         }
 
@@ -106,7 +125,14 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
 
     public void Set(IEnumerable<T> newValues)
     {
+        ArgumentNullException.ThrowIfNull(newValues);
         this.CheckDisposed();
+        
+        if (this.Options.PrecheckUpdateRequests && newValues.TryGetNonEnumeratedCount(out var count))
+        {
+            if (count == 0 && this.BackingCollection.Count == 0)
+                return;
+        }
         
         this.RequestUpdate();
         
@@ -117,19 +143,70 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     
     public void Add(T item)
     {
+        ArgumentNullException.ThrowIfNull(item);
         this.CheckDisposed();
+        
+        if (this.Options.PrecheckUpdateRequests && this.BackingCollection.Contains(item))
+            return;
+        
+        this.RequestUpdate();
+
+        if (!this.BackingCollection.Contains(item))
+        {
+            this.BackingCollection.Add(item);
+            this.Changed();
+        }
+    }
+
+    public void Add(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        this.CheckDisposed();
+
+        if (this.Options.PrecheckUpdateRequests && items is ICollection<T> coll)
+        {
+            if (coll.Count <= 0)
+                return;
+            
+            if (coll.All(d => this.BackingCollection.Contains(d)))
+                return;
+            
+        }
+        else if (items.TryGetNonEnumeratedCount(out var count) && count <= 0)
+        {
+            return;
+        }
         
         this.RequestUpdate();
         
-        this.BackingCollection.Add(item);
-        this.Changed();
+        var changed = false;
+        
+        foreach (var item in items)
+        {
+            if (!this.BackingCollection.Contains(item))
+            {
+                this.BackingCollection.Add(item);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            this.Changed();
+        }
     }
     
     public void Clear()
     {
         this.CheckDisposed();
+
+        if (this.Options.PrecheckUpdateRequests && this.BackingCollection.Count <= 0)
+            return;
         
         this.RequestUpdate();
+        
+        if (this.BackingCollection.Count <= 0)
+            return;
         
         this.BackingCollection.Clear();
         this.Changed();
@@ -140,7 +217,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         if (this.IsDisposed)
         {
             return DisposedSignalAccess
-                .Access(_disposedCapture, this)
+                .Access(this.DisposedCapture, this)
                 .Contains(item);
         }
 
@@ -152,10 +229,12 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     
     public void CopyTo(T[] array, int arrayIndex)
     {
+        ArgumentNullException.ThrowIfNull(array);
+        
         if (this.IsDisposed)
         {
             DisposedSignalAccess
-                .Access(_disposedCapture, this)
+                .Access(this.DisposedCapture, this)
                 .CopyTo(array, arrayIndex);
             
             return;
@@ -169,7 +248,12 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     
     public bool Remove(T item)
     {
+        ArgumentNullException.ThrowIfNull(item);
+        
         this.CheckDisposed();
+        
+        if (this.Options.PrecheckUpdateRequests && !this.BackingCollection.Contains(item))
+            return false;
         
         this.RequestUpdate();
         
