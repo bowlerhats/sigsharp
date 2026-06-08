@@ -45,6 +45,7 @@ public class SignalTests
         // ReSharper disable once DisposeOnUsingVariable
         signal.Dispose();
         
+        // ReSharper disable once AccessToDisposedClosure
         Assert.Throws<SignalDisposedException>(() => signal.Value.ShouldBe(5));
     }
     
@@ -71,6 +72,7 @@ public class SignalTests
         // ReSharper disable once DisposeOnUsingVariable
         signal.Dispose();
         
+        // ReSharper disable once AccessToDisposedClosure
         Assert.Throws<SignalDisposedException>(() => signal.Value.ShouldBe(testObject));
     }
 

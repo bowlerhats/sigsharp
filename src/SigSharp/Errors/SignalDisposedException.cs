@@ -5,7 +5,7 @@ namespace SigSharp;
 
 public class SignalDisposedException : ObjectDisposedException
 {
-    public new static void ThrowIf([DoesNotReturnIf(true)] bool condition, object instance)
+    public new static void ThrowIf([DoesNotReturnIf(true)] bool condition, object? instance)
     {
         if (condition)
             throw new SignalDisposedException(instance?.GetType().FullName);

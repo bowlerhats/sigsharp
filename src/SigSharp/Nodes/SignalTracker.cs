@@ -28,6 +28,7 @@ internal sealed partial class SignalTracker
 
     internal SignalTracker? Parent => _parent;
 
+    // ReSharper disable once FunctionRecursiveOnAllPaths
     internal SignalTracker Root => _parent?.Root ?? this;
     
     internal bool IsRoot => this.Root == this;
