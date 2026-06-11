@@ -10,13 +10,15 @@ internal sealed class GatedLatch<T>: IDisposable
 {
     public bool IsGateClosed => !_gate.IsSet;
     public SignalTracker? ClosedBy => _closedBy;
+
+    public bool IsEmpty => !this.IsGateClosed && _latches.Count == 0;
     
     private readonly ManualResetEventSlim _gate = new(true);
     private readonly ManualResetEventSlim _latch = new(true);
 
     private SpinLock _lock = new(false);
 
-    private readonly HashSet<T> _latches = new(32);
+    private readonly HashSet<T> _latches = [];
     
     private bool _disposed;
     private SignalTracker? _closedBy;
@@ -90,6 +92,9 @@ internal sealed class GatedLatch<T>: IDisposable
             
             if (_latches.Count == 0)
             {
+                if (_latches.Capacity > 3)
+                    _latches.Clear();
+                
                 if (!_latch.IsSet)
                     _latch.Set();
             }
@@ -132,6 +137,14 @@ internal sealed class GatedLatch<T>: IDisposable
         this.CheckDisposed();
         
         return _latch.Wait(timeout);
+    }
+
+    public void Reset()
+    {
+        _latches.Clear();
+        _closedBy = null;
+        _gate.Set();
+        _latch.Set();
     }
 
     private void CheckDisposed()

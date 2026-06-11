@@ -35,7 +35,7 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
     private DisposedSignalAccess.DisposedCapture<T> _disposedCapture;
 
     private Signal(bool isInitialSet, T initialValue, SignalOptions? opts = null, string? name = null)
-        : base(true, false, name ?? $"Signal<{typeof(T).Name}>")
+        : base(true, false, name ?? ConstructName())
     {
         _value = isInitialSet ? initialValue : default!;
         
@@ -143,4 +143,16 @@ public sealed class Signal<T> : SignalNode, IReadOnlySignal<T>, IWritableSignal<
         
         return $"id: {this.NodeId} | {_value?.ToString() ?? "null"}";
     }
+    
+    private static string ConstructName()
+    {
+        if (InternalCaches.NameCache.TryGetValue(typeof(T), out var name))
+            return name;
+        
+        name = $"Signal<{typeof(T).Name}>";
+
+        InternalCaches.NameCache[typeof(T)] = name;
+
+        return name;
+    } 
 }

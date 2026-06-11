@@ -57,7 +57,7 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         IEnumerable<T> initialValues,
         CollectionSignalOptions? opts = null,
         string? name = null
-        ) : base(true, false, name ?? $"CollectionSignal<{typeof(T).Name}, {typeof(TCollection).Name}>")
+        ) : base(true, false, name ?? ConstructName())
     {
         this.Options = opts ?? CollectionSignalOptions.Defaults;
 
@@ -102,6 +102,8 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
     {
         return this.CreateBackingCollection([]);
     }
+
+    
 
     public IEnumerator<T> GetEnumerator()
     {
@@ -264,5 +266,19 @@ public abstract class CollectionSignal<T, TCollection> : SignalNode, ICollection
         }
 
         return res;
+    }
+
+    private static string ConstructName()
+    {
+        var ck = ValueTuple.Create(typeof(T), typeof(TCollection));
+        
+        if (InternalCaches.CollectionNameCache.TryGetValue(ck, out var name))
+            return name;
+
+        name = $"CollectionSignal<{typeof(T).Name}, {typeof(TCollection).Name}>";
+        
+        InternalCaches.CollectionNameCache[ck] = name;
+
+        return name;
     }
 }

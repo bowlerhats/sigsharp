@@ -249,7 +249,7 @@ internal sealed partial class SignalTracker
         foreach (var tracker in ObjectWalker.Walk(this, static tracker => tracker._parent))
         {
             tracker.Locked.Add(node);
-            node.LockedBy.Add(tracker);
+            node.AddLockedBy(tracker);
         }
     }
 
@@ -303,7 +303,7 @@ internal sealed partial class SignalTracker
 
         try
         {
-            node.Waiters.Add(this);
+            node.AddWaiter(this);
             this.Waited.Add(node);
             
             while (!accessLock.Wait(timeout))
@@ -316,7 +316,7 @@ internal sealed partial class SignalTracker
                 if (this.HoldsLock(node, true))
                     return true;
 
-                if (node.LockedBy.HasAny)
+                if (node.LockedBy?.HasAny ?? false)
                 {
                     if (this.IsDeadlocked(node))
                     {
@@ -329,7 +329,7 @@ internal sealed partial class SignalTracker
         }
         finally
         {
-            node.Waiters.Remove(this);
+            node.RemoveWaiter(this);
             this.Waited.Remove(node);
         }
     }
@@ -365,14 +365,18 @@ internal sealed partial class SignalTracker
         {
             if (!visitedNodes.Add(lockedNode))
                 continue;
-            
-            foreach (var waiterTrack in lockedNode.Waiters)
+
+            var waiters = lockedNode.Waiters;
+            if (waiters is not null)
             {
-                if (waiterTrack.HoldsLock(checkNode, true))
-                    return true;
-                
-                var sublock = waiterTrack.GatherLocked();
-                sublock.ForEach(lockedNodes.Enqueue);
+                foreach (var waiterTrack in waiters)
+                {
+                    if (waiterTrack.HoldsLock(checkNode, true))
+                        return true;
+
+                    var sublock = waiterTrack.GatherLocked();
+                    sublock.ForEach(lockedNodes.Enqueue);
+                }
             }
         }
 
@@ -394,7 +398,7 @@ internal sealed partial class SignalTracker
                 return;
             }
 
-            if (node.LockedBy.HasAny)
+            if (node.LockedBy?.HasAny ?? false)
             {
                 this.YieldWhenYoungerThan(node);
 
@@ -407,10 +411,6 @@ internal sealed partial class SignalTracker
     
     private void PreEmptiveAccess(SignalNode node)
     {
-        var accessLatch = node.AccessLatch;
-        if (accessLatch is null)
-            return;
-
         if (this.HasLatched(node))
         {
             this.YieldWhenYoungerThan(node);
@@ -419,6 +419,9 @@ internal sealed partial class SignalTracker
             
             return;
         }
+
+        if (!node.TryGetOrCreateAccessLatch(out var accessLatch))
+            return;
         
         if (!accessLatch.Acquire(this.Root, TimeSpan.FromMilliseconds(10)))
         {
@@ -429,7 +432,7 @@ internal sealed partial class SignalTracker
             
             try
             {
-                node.Waiters.Add(this);
+                node.AddWaiter(this);
                 this.Waited.Add(node);
 
                 while (!accessLatch.Acquire(this.Root, TimeSpan.FromMilliseconds(300)))
@@ -462,7 +465,7 @@ internal sealed partial class SignalTracker
             }
             finally
             {
-                node.Waiters.Remove(this);
+                node.RemoveWaiter(this);
                 this.Waited.Remove(node);
             }
         }
@@ -474,11 +477,10 @@ internal sealed partial class SignalTracker
     
     private void PreEmptiveUpdate(SignalNode node)
     {
-        var accessLatch = node.AccessLatch;
-        if (accessLatch is null)
-            return;
-
         this.YieldWhenYoungerThan(node);
+        
+        if (!node.TryGetOrCreateAccessLatch(out var accessLatch))
+            return;
 
         lock (node.RequestLock)
         {
@@ -511,7 +513,7 @@ internal sealed partial class SignalTracker
 
             try
             {
-                node.Waiters.Add(this);
+                node.AddWaiter(this);
                 this.Waited.Add(node);
 
                 while (!accessLatch.Wait(TimeSpan.FromMilliseconds(300)))
@@ -531,7 +533,7 @@ internal sealed partial class SignalTracker
             }
             finally
             {
-                node.Waiters.Remove(this);
+                node.RemoveWaiter(this);
                 this.Waited.Remove(node);
             }
         }
@@ -541,22 +543,26 @@ internal sealed partial class SignalTracker
 
     private void YieldWhenYoungerThan(SignalNode node)
     {
-        if (node.LockedBy.IsEmpty)
+        if (node.LockedBy?.IsEmpty ?? true)
             return;
 
         SignalTracker? minLocker = null;
 
-        foreach (var lockingTracker in node.LockedBy)
+        var lockedBy = node.LockedBy;
+        if (lockedBy is not null)
         {
-            minLocker ??= lockingTracker;
-            
-            foreach (var lTracker in ObjectWalker.Walk(lockingTracker, static d => d.Parent))
+            foreach (var lockingTracker in lockedBy)
             {
-                if (!lTracker.AcceptEffects)
-                    continue;
+                minLocker ??= lockingTracker;
 
-                if (lTracker._trackerId < minLocker._trackerId)
-                    minLocker = lTracker;
+                foreach (var lTracker in ObjectWalker.Walk(lockingTracker, static d => d.Parent))
+                {
+                    if (!lTracker.AcceptEffects)
+                        continue;
+
+                    if (lTracker._trackerId < minLocker._trackerId)
+                        minLocker = lTracker;
+                }
             }
         }
 
@@ -708,7 +714,7 @@ internal sealed partial class SignalTracker
         foreach (var node in this.Locked)
         {
             this.Locked.Remove(node);
-            node.LockedBy.Remove(this);
+            node.RemoveLockedBy(this);
 
             try
             {
@@ -723,6 +729,7 @@ internal sealed partial class SignalTracker
                             break;
                         case SignalAccessStrategy.PreemptiveLock:
                             node.AccessLatch?.ReleaseGate(this.Root);
+                            node.TryFreeAccessLatch();
                             break;
                         default: throw new ArgumentOutOfRangeException();
                     }
@@ -741,6 +748,7 @@ internal sealed partial class SignalTracker
             foreach (var node in this.Latched)
             {
                 node.AccessLatch?.Release(this);
+                node.TryFreeAccessLatch();
             }
             
             this.Latched.Clear();

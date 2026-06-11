@@ -32,6 +32,12 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
         _dict = [];
     }
 
+    public ConcurrentHashSet(int capacity)
+    {
+        _set = new SmallSet<T>(capacity);
+        _dict = [];
+    }
+
     public ConcurrentHashSet(IEnumerable<T> collection)
     {
         if (_isSmall)
@@ -86,6 +92,11 @@ internal sealed class ConcurrentHashSet<T> : ICollection<T>, IReadOnlyCollection
     void ICollection<T>.Add(T item)
     {
         this.Add(item);
+    }
+
+    public void TrimExcess()
+    {
+        
     }
 
     public bool Add(T item)

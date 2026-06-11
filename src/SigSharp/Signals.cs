@@ -89,11 +89,4 @@ public static partial class Signals
             return ex.Signal;
         }
     }
-
-    public static void DropCaches()
-    {
-        SignalTracker.TrackerPool.Clear();
-        
-    }
-
 }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using SigSharp.Utils;
 using SigSharp.Utils.Perf;
+using SigSharp.Utils.Pooling;
 
 namespace SigSharp.Nodes;
 
@@ -13,7 +14,8 @@ internal partial class SignalTracker
 
     public static bool IsReadonlyContext => Current?.IsReadonly ?? false;
 
-    internal static ItemPool<SignalTracker> TrackerPool { get; } = new();
+    private static ISignalItemPool<SignalTracker> TrackerPool
+        => SignalItemPools.TrackerPool;
     
     private static readonly AsyncLocal<SignalTracker?> CurrentTracker = new();
 
@@ -78,19 +80,27 @@ internal partial class SignalTracker
                         if (node.IsDisposing || !node.IsTrackable)
                             return;
 
-                        foreach (var lockTracker in node.LockedBy)
+                        var lockedBy = node.LockedBy;
+                        if (lockedBy is not null)
                         {
-                            foreach (var tracker in ObjectWalker.Walk(lockTracker, static d => d._parent))
+                            foreach (var lockTracker in lockedBy)
                             {
-                                r.Add(tracker);
+                                foreach (var tracker in ObjectWalker.Walk(lockTracker, static d => d._parent))
+                                {
+                                    r.Add(tracker);
+                                }
                             }
                         }
-                        
-                        foreach (var lockTracker in node.Waiters)
+
+                        var waiters = node.Waiters;
+                        if (waiters is not null)
                         {
-                            foreach (var tracker in ObjectWalker.Walk(lockTracker, static d => d._parent))
+                            foreach (var lockTracker in waiters)
                             {
-                                r.Add(tracker);
+                                foreach (var tracker in ObjectWalker.Walk(lockTracker, static d => d._parent))
+                                {
+                                    r.Add(tracker);
+                                }
                             }
                         }
                     }

@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SigSharp.Utils;
 using SigSharp.Utils.Perf;
+using SigSharp.Utils.Pooling;
 
 namespace SigSharp.Nodes;
 
@@ -46,14 +49,15 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
 
     public uint Version => _version;
 
-    internal GatedLatch<SignalTracker>? AccessLatch { get; private set; }
-    internal SemaphoreSlim? AccessLock { get; private set; }
-
     protected internal readonly ILogger Logger;
-    
-    private readonly ConditionalWeakTable<SignalNode, object> _referencedBy = [];
+
+    internal SemaphoreSlim? AccessLock { get; private set; }
+    internal GatedLatch<SignalTracker>? AccessLatch { get; private set; }
+
+    private ConditionalWeakTable<SignalNode, object>? _referencedBy;
 
     // Lock the referencedBy because of minimizing it's internal allocations (ensure no multiple enumerators cause copies)
+    // Can be removed in the future when we have a good WeakSet implementation
     private readonly Lock _refLock = new();
     
     // TODO: Use weakset
@@ -63,8 +67,14 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     private volatile bool _disposing;
 
     internal Lock RequestLock { get; } = new();
-    internal ConcurrentHashSet<SignalTracker> Waiters { get; } = [];
-    internal ConcurrentHashSet<SignalTracker> LockedBy { get; } = [];
+
+    private SpinLock _trackingSetsLock = new(false);
+
+    private ConcurrentHashSet<SignalTracker>? _waiters;
+    internal ConcurrentHashSet<SignalTracker>? Waiters => _waiters;
+
+    private ConcurrentHashSet<SignalTracker>? _lockedBy;
+    internal ConcurrentHashSet<SignalTracker>? LockedBy => _lockedBy;
     
     protected SignalNode(
         bool isTrackable,
@@ -96,16 +106,24 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
 
         lock (_refLock)
         {
-            _referencedBy.Clear();
+            if (_referencedBy is not null)
+            {
+                _referencedBy.Clear();
+                SignalItemPools.ReferencedByPool.Return(_referencedBy);
+                _referencedBy = null;
+            }
         }
 
         this.NewVersion();
+
+        this.ForceReturnAccessLatch();
         
-        this.AccessLatch?.Dispose();
-        this.AccessLatch = null;
         this.AccessLock?.Dispose();
         this.AccessLock = null;
         
+        this.ReturnWaiter();
+        this.ReturnLockedBy();
+
         Perf.Decrement("signal.node.count");
         
         return ValueTask.CompletedTask;
@@ -161,25 +179,23 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
 
     protected void SetAccessStrategy(SignalAccessStrategy accessStrategy)
     {
-        this.AccessLatch?.Dispose();
-        this.AccessLatch = null;
+        this.ForceReturnAccessLatch();
+        
         this.AccessLock?.Dispose();
         this.AccessLock = null;
 
         this.AccessStrategy = accessStrategy;
-        
+
         switch (accessStrategy)
         {
+            case SignalAccessStrategy.PreemptiveLock:
             case SignalAccessStrategy.Optimistic:
             case SignalAccessStrategy.Unrestricted:
                 break;
             case SignalAccessStrategy.ExclusiveLock:
                 this.AccessLock = new SemaphoreSlim(1);
                 break;
-            case SignalAccessStrategy.PreemptiveLock:
-                this.AccessLatch = new GatedLatch<SignalTracker>();
-                break;
-            default:                                   throw new ArgumentOutOfRangeException(nameof(accessStrategy), accessStrategy, null);
+            default: throw new ArgumentOutOfRangeException(nameof(accessStrategy), accessStrategy, null);
         }
     }
     
@@ -190,7 +206,12 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     {
         lock (_refLock)
         {
-            foreach (var (node, _) in _referencedBy)
+            var refBy = _referencedBy;
+
+            if (refBy is null)
+                return;
+            
+            foreach (var (node, _) in refBy)
             {
                 action(state, node);
             }
@@ -201,7 +222,12 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     {
         lock (_refLock)
         {
-            foreach (var (node, _) in _referencedBy)
+            var refBy = _referencedBy;
+
+            if (refBy is null)
+                return;
+            
+            foreach (var (node, _) in refBy)
             {
                 action(node);
             }
@@ -267,6 +293,7 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     {
         lock (_refLock)
         {
+            _referencedBy ??= SignalItemPools.ReferencedByPool.Rent();
             _referencedBy.AddOrUpdate(node, EmptyObject);
         }
     }
@@ -275,7 +302,19 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     {
         lock (_refLock)
         {
+            if (_referencedBy is null)
+                return;
+            
             _referencedBy.RemoveSafe(node);
+
+            if (!_referencedBy.Any())
+            {
+                var refBy = _referencedBy;
+                _referencedBy = null;
+                
+                refBy.Clear();
+                SignalItemPools.ReferencedByPool.Return(refBy);
+            }
         }
     }
     
@@ -297,6 +336,175 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
         
         this.IsDirty = false;
         this.IsShadowDirty = false;
+    }
+
+    internal void AddWaiter(SignalTracker tracker)
+    {
+        if (this.IsDisposing)
+            return;
+        
+        ConcurrentHashSet<SignalTracker>? rented = null;
+        
+        while (true)
+        {
+            rented ??= _waiters is null ? SignalItemPools.WaiterPool.Rent() : null;
+            
+            var lockTaken = false;
+            try
+            {
+                _trackingSetsLock.Enter(ref lockTaken);
+
+                if (_waiters is not null)
+                {
+                    _waiters.Add(tracker);
+                    break;
+                }
+                
+                if (rented is null)
+                    continue;
+
+                _waiters = rented;
+                rented = null;
+                _waiters.Add(tracker);
+
+                break;
+            }
+            finally
+            {
+                if (lockTaken)
+                    _trackingSetsLock.Exit(false);
+            }
+        }
+        
+        if (rented is not null)
+        {
+            SignalItemPools.WaiterPool.Return(rented);
+        }
+    }
+    
+    internal void RemoveWaiter(SignalTracker tracker)
+    {
+        ConcurrentHashSet<SignalTracker>? waiters = _waiters;
+        
+        waiters?.Remove(tracker);
+        
+        if (waiters is null || waiters.Count > 0)
+            return;
+        
+        this.ReturnWaiter();
+    }
+
+    private void ReturnWaiter()
+    {
+        ConcurrentHashSet<SignalTracker>? toReturn = null;
+        
+        var lockTaken = false;
+        try
+        {
+            _trackingSetsLock.Enter(ref lockTaken);
+            
+            if (_waiters is not null)
+            {
+                toReturn = _waiters;
+                _waiters = null;
+            }
+        }
+        finally
+        {
+            if (lockTaken)
+                _trackingSetsLock.Exit(false);
+        }
+
+        if (toReturn is not null)
+        {
+            toReturn.Clear();
+            SignalItemPools.WaiterPool.Return(toReturn);
+        }
+    }
+
+    internal void AddLockedBy(SignalTracker tracker)
+    {
+        if (this.IsDisposing)
+            return;
+        
+        ConcurrentHashSet<SignalTracker>? rented = null;
+        
+        while (true)
+        {
+            rented ??= _lockedBy is null ? SignalItemPools.LockedByPool.Rent() : null;
+            
+            var lockTaken = false;
+            try
+            {
+                _trackingSetsLock.Enter(ref lockTaken);
+
+                if (_lockedBy is not null)
+                {
+                    _lockedBy.Add(tracker);
+                    break;
+                }
+                
+                if (rented is null)
+                    continue;
+
+                _lockedBy = rented;
+                rented = null;
+                
+                _lockedBy.Add(tracker);
+
+                break;
+            }
+            finally
+            {
+                if (lockTaken)
+                    _trackingSetsLock.Exit(false);
+            }
+        }
+        
+        if (rented is not null)
+        {
+            SignalItemPools.LockedByPool.Return(rented);
+        }
+    }
+
+    internal void RemoveLockedBy(SignalTracker tracker)
+    {
+        ConcurrentHashSet<SignalTracker>? lockedBy = _lockedBy;
+        
+        lockedBy?.Remove(tracker);
+        
+        if (lockedBy is null || lockedBy.Count > 0)
+            return;
+
+        this.ReturnLockedBy();
+    }
+
+    private void ReturnLockedBy()
+    {
+        ConcurrentHashSet<SignalTracker>? toReturn = null;
+        
+        var lockTaken = false;
+        try
+        {
+            _trackingSetsLock.Enter(ref lockTaken);
+            
+            if (_lockedBy is not null)
+            {
+                toReturn = _lockedBy;
+                _lockedBy = null;
+            }
+        }
+        finally
+        {
+            if (lockTaken)
+                _trackingSetsLock.Exit(false);
+        }
+
+        if (toReturn is not null)
+        {
+            toReturn.Clear();
+            SignalItemPools.LockedByPool.Return(toReturn);
+        }
     }
     
     protected virtual void OnDirty()
@@ -331,7 +539,12 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
 
         lock (_refLock)
         {
-            foreach (var (node, _) in _referencedBy)
+            var refBy = _referencedBy;
+
+            if (refBy is null)
+                return false;
+            
+            foreach (var (node, _) in refBy)
             {
                 visited.Add(node);
 
@@ -398,5 +611,95 @@ public abstract class SignalNode : IDisposable, IAsyncDisposable
     public override string ToString()
     {
         return $"{this.GetType().Name}({this.NodeId}):{this.Name ?? "Anonymous"}";
+    }
+
+    internal bool TryGetOrCreateAccessLatch([MaybeNullWhen(false)]out GatedLatch<SignalTracker> accessLatch)
+    {
+        accessLatch = null;
+        
+        if (this.IsDisposing)
+            return false;
+
+        accessLatch = this.AccessLatch;
+        if (accessLatch is not null)
+            return true;
+
+        GatedLatch<SignalTracker>? rented = null;
+        while (true)
+        {
+             rented ??= this.AccessLatch is null
+                ? SignalItemPools.AccessLatchPool.Rent()
+                : null;
+            
+            var lockTaken = false;
+            try
+            {
+                _trackingSetsLock.Enter(ref lockTaken);
+
+                accessLatch = this.AccessLatch;
+
+                if (accessLatch is not null)
+                    break;
+            
+                if (accessLatch is null && rented is not null)
+                {
+                    this.AccessLatch = rented;
+                    accessLatch = rented;
+                    rented = null;
+                    break;
+                }
+            }
+            finally
+            {
+                if (lockTaken)
+                    _trackingSetsLock.Exit(false);
+            }
+        }
+
+        if (rented is not null)
+        {
+            SignalItemPools.AccessLatchPool.Return(rented);
+        }
+
+        return true;
+    }
+
+    internal void TryFreeAccessLatch()
+    {
+        GatedLatch<SignalTracker>? toReturn = null;
+        
+        var lockTaken = false;
+        try
+        {
+            _trackingSetsLock.Enter(ref lockTaken);
+            
+            if (this.AccessLatch is { IsEmpty: true })
+            {
+                toReturn = this.AccessLatch;
+                this.AccessLatch = null;
+            }
+        }
+        finally
+        {
+            if (lockTaken)
+                _trackingSetsLock.Exit(false);
+        }
+
+        if (toReturn is not null)
+        {
+            toReturn.Reset();
+            SignalItemPools.AccessLatchPool.Return(toReturn);
+        }
+    }
+
+    private void ForceReturnAccessLatch()
+    {
+        var latch = this.AccessLatch;
+        if (latch is not null)
+        {
+            this.AccessLatch = null;
+            latch.Reset();
+            SignalItemPools.AccessLatchPool.Return(latch);
+        }
     }
 }

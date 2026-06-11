@@ -1,8 +1,9 @@
 ﻿using System.Threading.Channels;
+using SigSharp.Utils.Pooling;
 
 namespace SigSharp.Utils;
 
-internal sealed class ItemPool<T>
+internal sealed class ItemPool<T> : ISignalItemPool<T>
     where T: new()
 {
     private readonly Channel<T> _channel;
