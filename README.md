@@ -1,46 +1,49 @@
-SigSharp
-==========
+# SigSharp
 
-A computational dependency library for .Net inspired by Angular signals.
+Reactive signals for .NET — automatic dependency tracking, lazy evaluation, no manual subscriptions.
 
-Supports `Signal`, `Computed`, `Effect` constructs and collection signals (`HashSetSignal<>`, `DictionarySignal<>`)
-with full reference and lifecycle tracking, memoization.
+A computational dependency library for .NET inspired by Angular signals.
 
-SigSharp is intended to be used when you need complex calculation chains which are not deterministic or fast enough to be implemented with just using simple properties. 
+**Alpha** &nbsp;·&nbsp; .NET 10 &nbsp;·&nbsp; Apache-2.0 &nbsp;·&nbsp; [NuGet](https://www.nuget.org/packages/SigSharp)
 
-Some example usage scenarios:
-- Complex financial calculations
-- Report data or model preparation
-- Model based generators
-- Complex state representations
+You write property expressions the same way you always would — the only change is wrapping them in `Computed()`. The library discovers dependencies automatically by observing which signals each expression reads; no need to wire up events or observers by hand. Signal changes propagate automatically through a dependency graph, recomputing only what is needed.
 
+**When to reach for SigSharp:**
+- Complex financial calculations or pricing engines
+- Report and model data preparation
+- Model-based generators
+- Any state where manually wiring change propagation becomes painful
 
-Minimal usage example
----------------------
+---
 
-```bash
-> dotnet add package SigSharp
+## Installation
+
+```shell
+dotnet add package SigSharp
 ```
 
-```C#
+---
+
+## Quick Start
+
+The three primitives are `Signal<T>`, `Computed`, and `Effect`. Inside a class, the `this.Computed()` and `this.Effect()` extension methods wire everything up automatically — no group management needed.
+
+```csharp
 using SigSharp;
 
 var calculator = new InvoiceCalculator();
 
 calculator.InvoiceLinePrices.Add(4);
 
-Console.WriteLine($"Debug total: {calculator.InvoiceTotalDebug}");
-Console.Out.Flush();
-
-// second call to get property value will be memoized, not recomputed
-Console.WriteLine($"Debug total: {calculator.InvoiceTotalDebug}");
+Console.WriteLine($"Total: {calculator.InvoiceTotalDebug}");
+Console.WriteLine($"Total: {calculator.InvoiceTotalDebug}"); // memoized — body does not run again
 Console.Out.Flush();
 
 /* Output:
 Total updating...
-Debug total: 10
 Total updated: 10
-Debug total: 10
+Total: 10
+Total: 10
 */
 
 class InvoiceCalculator
@@ -48,104 +51,99 @@ class InvoiceCalculator
     public readonly HashSetSignal<double> InvoiceLinePrices = new([1, 2, 3]);
 
     public double InvoiceTotal => this.Computed(() => InvoiceLinePrices.Sum());
-    
+
     public double InvoiceTotalDebug => this.Computed(() =>
     {
         Console.WriteLine("Total updating...");
-        
         return InvoiceTotal;
     });
 
     public InvoiceCalculator()
     {
-        this.Effect(() =>
-        {
+        this.Effect(() => {
             Console.WriteLine($"Total updated: {InvoiceTotal}");
             Console.Out.Flush();
         });
     }
 }
-
-
 ```
 
-Other examples can be found in [Examples](./examples/SimpleDemo/Program.cs) folder
+The second call to `InvoiceTotalDebug` returns the cached result — `Computed` only re-evaluates when a dependency has changed since the last read.
 
-Features / Goals
---------
+More examples are in the [examples](./examples/) folder.
+
+---
+
+## Features / Goals
 
 - Healthy balance between ease of use and performance
-- Extensibility: letting you implement that last 5% you very much need for your project/usage
+- Extensibility: covers the common cases out of the box, with dedicated extension points so you can implement that last 5% specific to your project yourself
 - Self-contained and AOT compatible.
 
-Key concepts
-------------
 
-A `Signal` is a piece of data that can change, and those changes are tracked.
-For example, tracked by a `ComputedSignal` which is a glorified memoized expression.
-When the system calculates the value of that expression and touches any signal (including other computed signals),
-it remembers to watch for changes of those signals. When any of the changes it marks itself dirty which indicates
-that it needs to be recalculated next time someone asks for its value.
+## Key Concepts
 
-An `Effect` is a reaction to signal changes.
+A **Signal** is a piece of data that can change, and those changes are tracked by reactive nodes.
 
-If you imagine all the dependencies between various signals, computations and effects,
-then it forms a compute graph. Each of these elements form the nodes.
-`Signal`, `HashSetSignal<>`, etc. are primitive `signal nodes`, while `ComputedSignal` and `Effect` are `reactive nodes`.
+A **ComputedSignal** is a lazily-evaluated, memoized expression and a reactive signal. Every evaluation of its expression records which signals were read. If any of those signals change later, it is marked dirty and on the next call it recalculates its expression.
 
-Reactive nodes must be part of a `SignalGroup`. If you are using the extension methods, the group management is handled automatically for you.
-The target (this param) of the extension methods act as `anchors` or in other words `keys` for implicit signal groups.
-They are linked via a weakmap.
+An **Effect** is a reaction to signal changes. It may have side-effects and by default re-runs automatically when any of its signal dependencies change.
 
-Other notable features
---------------
+If you imagine all the dependencies between signals, computations, and effects, they form a **compute graph**. `Signal`s are the leaf nodes; `ComputedSignal`s and `Effect`s are the reactive nodes that track their own dependencies at runtime.
 
-1. `Untracked` support
+Reactive nodes must belong to exactly one **SignalGroup**. The `this.Computed()` / `this.Effect()` extension methods create and manage groups implicitly. The calling instance serves as the **anchor** key via a weak map. When you need a group outside a class, create one explicitly:
 
-In the example below the two public properties will be calculated once, because the reference to
-the signal is explicitly untracked, so their value will never be dirty.
-```C#
-class Some 
-{
-    private Signal<int> dontReactToMe = new(0);
-    public int CalcOnce => this.Computed(() => dontReactToMe.Untracked);
-    public int CalcOnce2 => this.Computed(() => Signals.Untracked(() => dontReactToMe));
-}
-
+```csharp
+using var group = new SignalGroup();
+var effect = group.Effect(() => Console.WriteLine($"Torque: {engine.CurrentTorque}"));
+engine.AddGas();
+effect.WaitIdle(); // <- good practice to wait for the effect to finish before the group is disposed
 ```
 
-2. Effect suspensions
+---
 
-Suspensions are "async local", not global. They are useful when you want to batch together lot of changes.
+## Advanced Features
 
-```C#
-public async Task Load() 
+### Untracked access
+
+Read a signal's value without registering a dependency. The enclosing computed will not re-run when that signal changes.
+
+```csharp
+class Some
+{
+    private Signal<int> _source = new(0);
+
+    // Calculated once; never dirty because the read is untracked.
+    public int CalcOnce  => this.Computed(() => _source.Untracked);
+    public int CalcOnce2 => this.Computed(() => Signals.Untracked(() => _source));
+}
+```
+
+### Effect suspension (batching)
+
+Suspend effect execution while making many signal changes. Suspensions are async-local, not global, so they are safe in concurrent code.
+
+```csharp
+public async Task Load()
 {
     await using var suspender = Signals.Suspend();
-    // do tons of loading, setting signals, etc.
-    
-    // at the end of loading the disposal
-    // of the suspender will resume the affected effects
+    // Set many signals; effects are held back until the suspender disposes.
 }
 ```
 
-3. Disposed value access handling
+### Disposed value handling
 
-Signals can be configured how to behave after they are disposed. By default they try to "remember" their last scalar value.
+Signals can be configured to retain their last value after disposal, so downstream code continues to read a stable value after the owning object is gone.
 
-4. Weak effect and weak computation support
+### Weak effects and computations
 
-When effects or computations have a reference to a state, that state can be a WeakRef, so
-that the lifetime of these signals are tied to the WeakRef.
-It should be rarely used, but useful in fire and forget scenarios.
+Effects and computations can hold a `WeakRef` to their captured state, tying their lifetime to that object rather than keeping it alive. Useful in fire-and-forget scenarios where you do not want signals to prevent garbage collection.
 
+---
 
+## Contributing
 
-Contributions
--------------
-This library is in alpha state. Despite the api surface being ready for release, many bug fixes and other major background chagnes might happen.
-So until the library is in an alpha state, limited contributions will be accepted to not waste dev time.
+SigSharp is in **alpha**. Available as a source-available project.
 
-I kindly ask you to sign off the project's CLA, which provides legal ease-of-mind to You and fellow contributors.
-In addition to the DCO, we ask you to grant us (project owners) permission to change the license of the project to other open source license if need be in the future.
-For example we might want to change from the current Apache license to MIT or EPL in the future.
+Pull requests are closed, but issues are welcome — especially those regarding overall behaviour or proven performance-related problems.
+
