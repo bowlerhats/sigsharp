@@ -9,7 +9,12 @@ A computational dependency library for .NET inspired by Angular signals.
 You write property expressions the same way you always would — the only change is wrapping them in `Computed()`. The library discovers dependencies automatically by observing which signals each expression reads; no need to wire up events or observers by hand. Signal changes propagate automatically through a dependency graph, recomputing only what is needed.
 
 **When to reach for SigSharp:**
-- Complex financial calculations or pricing engines
+- **Expensive derived computations** that are read frequently but change infrequently — compiler/analyzer output, parsed models, heavy aggregations
+- **Lazy resolvers** and **async lookups** — external service calls, database queries, or file reads that re-execute only when their reactive inputs change, not on every access
+- **Calculation chains** where intermediate results should be cached and only recomputed when their specific inputs change
+- **Rule or constraint evaluation** over reactive data — rules that re-run only when the data they inspect actually changes
+- **Reactive pipelines** — filter → transform → generate workflows where each stage only reruns when its upstream changes
+- **Complex financial calculations** or **pricing engines**
 - Report and model data preparation
 - Model-based generators
 - Any state where manually wiring change propagation becomes painful
@@ -79,6 +84,9 @@ More examples are in the [examples](./examples/) folder.
 - Healthy balance between ease of use and performance
 - Extensibility: covers the common cases out of the box, with dedicated extension points so you can implement that last 5% specific to your project yourself
 - Self-contained and AOT compatible.
+- **Custom signal and effect types** — the architecture supports implementing your own signal and effect primitives; not yet stable but a first-class goal for release. Planned examples include:
+  - a **lens signal**: a focused, bidirectional node over a structured source that isolates change propagation — if the field it watches hasn't changed, it stays pristine and shields its dependents from the update entirely
+  - a **sequenced effect**: unlike the built-in debounced effect where only the latest state is processed, a sequenced effect observes every state transition in order — useful for audit logs, undo history, or event sourcing
 
 
 ## Key Concepts
