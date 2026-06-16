@@ -30,7 +30,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     
-    <PackageTags>signal computation memoize memoization</PackageTags>
+    <PackageTags>signal signals computed effect reactive reactivity dependency-tracking dependency-graph memoization memoize aot</PackageTags>
 
     <IsPackable>true</IsPackable>
 
